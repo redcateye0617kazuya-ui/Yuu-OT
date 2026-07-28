@@ -96,52 +96,62 @@
             margin-top: 10px;
         }
 
-        /* 中間：精美日曆與香港時間區 */
+        /* 中間：日曆與香港時間區改為左右結構 */
         .middle-section {
             display: flex;
             flex-direction: column;
             gap: 15px;
         }
-        .calendar-widget {
+        .calendar-widget-split {
             background: #c3bcae;
-            padding: 15px;
+            padding: 12px;
             border-radius: 16px;
             border: 1px solid #b5ab9d;
             display: flex;
-            justify-content: space-between;
             align-items: center;
+            gap: 10px;
         }
-        .cal-arrow {
-            background: none;
-            border: none;
-            font-size: 16px;
-            color: #3b231b;
-            cursor: pointer;
+        .cal-month-box {
+            background: #D0C9BA;
+            padding: 15px 10px;
+            border-radius: 12px;
+            text-align: center;
+            min-width: 85px;
+            border: 1px solid #b5ab9d;
+        }
+        .cal-month-box .month-name {
+            font-size: 14px;
             font-weight: bold;
+            color: #9C5138;
         }
-        .cal-days {
+        .cal-days-right {
             display: flex;
-            gap: 6px;
+            gap: 4px;
             justify-content: space-between;
-            width: 100%;
-            padding: 0 5px;
+            flex-grow: 1;
         }
         .cal-day-item {
             text-align: center;
-            padding: 8px 6px;
-            border-radius: 12px;
-            font-size: 11px;
+            padding: 6px 3px;
+            border-radius: 10px;
+            font-size: 10px;
             color: #6a5d53;
-            transition: all 0.2s;
+            background: #D0C9BA;
+            flex: 1;
         }
         .cal-day-item.active {
-            background: #D0C9BA;
-            color: #9C5138;
+            background: #9C5138;
+            color: #D0C9BA;
             font-weight: bold;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        }
+        .cal-day-item.active .day-num {
+            color: #D0C9BA;
         }
         .cal-day-item .day-num {
-            font-size: 13px;
+            font-size: 12px;
+            font-weight: bold;
+            color: #3b231b;
             margin-top: 2px;
         }
 
@@ -211,16 +221,15 @@
             <div class="status-text" id="statusBox">狀態：尚未綁定直播</div>
         </div>
 
-        <!-- 中間：仿照圖片嘅精美橫向日曆與香港即時時間 -->
+        <!-- 中間：左月份、右日期列 + 香港即時時間 -->
         <div class="middle-section">
-            <div class="widget-box" style="padding: 12px;">
-                <div style="font-size: 12px; color: #6a5d53; margin-bottom: 4px;" id="current-month-year">Month</div>
-                <div class="calendar-widget">
-                    <button class="cal-arrow" onclick="changeWeek(-1)">❮</button>
-                    <div class="cal-days" id="calendar-days-container">
-                        <!-- 動態生成 7 日橫向日曆 -->
-                    </div>
-                    <button class="cal-arrow" onclick="changeWeek(1)">❯</button>
+            <div class="calendar-widget-split">
+                <div class="cal-month-box">
+                    <div style="font-size: 10px; color: #6a5d53;">Month</div>
+                    <div class="month-name" id="current-month-year">July</div>
+                </div>
+                <div class="cal-days-right" id="calendar-days-container">
+                    <!-- 動態生成 7 日日期 -->
                 </div>
             </div>
 
@@ -253,35 +262,27 @@
     <script>
         let targetEndTime = null;
         let timerInterval = null;
-        let weekOffset = 0;
 
-        // 渲染香港動態日曆與即時時間
         function updateHKClockAndCalendar() {
             const now = new Date();
-            // 轉換為香港時間 (UTC+8)
             const hkTimeStr = now.toLocaleString("en-US", { timeZone: "Asia/Hong_Kong" });
             const hkDate = new Date(hkTimeStr);
 
-            // 更新即時時鐘顯示
+            // 更新香港即時時間
             document.getElementById("hk-realtime").innerText = hkDate.toTimeString().split(' ')[0];
             document.getElementById("hk-realdate").innerText = hkDate.toISOString().split('T')[0];
 
-            // 月份標題
+            // 月份名稱
             const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
             document.getElementById("current-month-year").innerText = monthNames[hkDate.getMonth()];
 
-            // 渲染 7 天橫向日曆 (以當天為中心或加減 weekOffset)
+            // 渲染本週 7 日 (以當前星期日到星期六為一列)
             const container = document.getElementById("calendar-days-container");
             container.innerHTML = "";
 
-            // 取得本周基准日
-            let centerDate = new Date(hkDate);
-            centerDate.setDate(centerDate.getDate() + (weekOffset * 7));
-
-            // 找出當週星期日
-            let currentDayOfWeek = centerDate.getDay();
-            let sunday = new Date(centerDate);
-            sunday.setDate(centerDate.getDate() - currentDayOfWeek);
+            let currentDayOfWeek = hkDate.getDay();
+            let sunday = new Date(hkDate);
+            sunday.setDate(hkDate.getDate() - currentDayOfWeek);
 
             const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
             
@@ -292,21 +293,15 @@
                 let isToday = d.toDateString() === hkDate.toDateString();
                 
                 let dayDiv = document.createElement("div");
-                dayDiv.className = `cal-day-item ${isToday && weekOffset === 0 ? 'active' : ''}`;
+                dayDiv.className = `cal-day-item ${isToday ? 'active' : ''}`;
                 dayDiv.innerHTML = `
-                    <div style="font-size: 10px;">${dayNames[i]}</div>
+                    <div style="font-size: 9px;">${dayNames[i]}</div>
                     <div class="day-num">${String(d.getDate()).padStart(2, '0')}</div>
                 `;
                 container.appendChild(dayDiv);
             }
         }
 
-        function changeWeek(direction) {
-            weekOffset += direction;
-            updateHKClockAndCalendar();
-        }
-
-        // 每秒更新時鐘
         setInterval(updateHKClockAndCalendar, 1000);
         updateHKClockAndCalendar();
 
