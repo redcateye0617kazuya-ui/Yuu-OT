@@ -8,7 +8,7 @@
         .card { background: #1e1e1e; padding: 30px; border-radius: 12px; display: inline-block; box-shadow: 0 4px 20px rgba(0,0,0,0.6); width: 420px; text-align: left; }
         h2 { text-align: center; color: #ff4757; margin-top: 0; }
         label { font-size: 13px; color: #bbb; display: block; margin-top: 12px; font-weight: bold; }
-        input[type="text"], input[type="date"] { width: 100%; padding: 10px; margin-top: 5px; border-radius: 6px; border: 1px solid #444; background: #2a2a2a; color: #fff; box-sizing: border-box; font-size: 14px; }
+        input[type="text"], input[type="date"], input[type="time"] { width: 100%; padding: 10px; margin-top: 5px; border-radius: 6px; border: 1px solid #444; background: #2a2a2a; color: #fff; box-sizing: border-box; font-size: 14px; }
         button { background: #ff4757; color: white; border: none; padding: 12px; width: 100%; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 15px; margin-top: 15px; }
         button:hover { opacity: 0.9; }
         .status { margin-top: 15px; color: #2ed573; font-size: 13px; text-align: center; background: #252525; padding: 8px; border-radius: 5px; }
@@ -27,6 +27,9 @@
             <label>開始日期：</label>
             <input type="date" name="start_date" value="{{ start_date }}" required>
             
+            <label>開台時間：</label>
+            <input type="time" name="start_time" value="{{ start_time }}" required>
+            
             <button type="submit" name="action" value="start" style="background: #2ed573;">🚀 Start 開始計時</button>
             <button type="submit" name="action" value="reset" style="background: #ffa502; margin-top: 8px;">🔄 重設狀態</button>
         </form>
@@ -43,7 +46,7 @@
 
     <script>
         const isStarted = {{ is_started }};
-        const hoursToAdd = 4.5; // 固定 4.5 小時
+        const hoursToAdd = 4.5; // 鎖定 4.5 小時
 
         function updateTimer() {
             const countdownElem = document.getElementById("countdown");
@@ -53,16 +56,26 @@
                 return;
             }
 
-            const now = new Date().getTime();
-            // 以禁 Start 嗰一刻開始計，加上 4.5 小時作為目標結束時間
-            if (!window.targetEndTime) {
-                window.targetEndTime = now + (hoursToAdd * 60 * 60 * 1000);
+            // 根據你填寫嘅「開始日期」同「開台時間」作為起點
+            const targetDateStr = "{{ start_date }}T{{ start_time }}:00";
+            const startTimeMillis = new Date(targetDateStr).getTime();
+
+            if (isNaN(startTimeMillis)) {
+                countdownElem.innerHTML = "❌ 日期或時間格式錯誤";
+                return;
             }
 
-            const distance = window.targetEndTime - now;
+            // 目標結束時間 = 開台時間 + 4.5 小時
+            const targetEndTime = startTimeMillis + (hoursToAdd * 60 * 60 * 1000);
+            const now = new Date().getTime();
+            const distance = targetEndTime - now;
 
             if (distance < 0) {
-                countdownElem.innerHTML = "⏰ 倒數時間已結束！";
+                const elapsed = Math.abs(distance);
+                const hours = Math.floor((elapsed % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                const minutes = Math.floor((elapsed % (1000 * 60 * 60)) / (1000 * 60));
+                const seconds = Math.floor((elapsed % (1000 * 60)) / 1000);
+                countdownElem.innerHTML = `🔥 已超時 ${hours}時 ${minutes}分 ${seconds}秒`;
             } else {
                 const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
                 const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
