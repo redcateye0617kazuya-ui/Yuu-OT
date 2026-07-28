@@ -1,40 +1,13 @@
 from flask import Flask, render_template_string, request
-from urllib.parse import urlparse, parse_qs
+import urllib.parse as urlparse
 
 app = Flask(__name__)
 
 # 預設變數設定
 current_chat_id = "尚未設定直播"
 current_video_url = ""
-# 預設為今日（2026-07-28）同晚上 8 點
 start_date = "2026-07-28"
 start_time = "20:00"
-
-
-def extract_youtube_video_id(video_url):
-    if not video_url:
-        return None
-
-    if '://' not in video_url:
-        video_url = 'https://' + video_url
-
-    parsed_url = urlparse(video_url)
-    hostname = parsed_url.netloc.lower()
-    path = parsed_url.path or ''
-
-    if hostname in ('youtu.be', 'www.youtu.be'):
-        return path.lstrip('/') or None
-
-    if 'youtube.com' in hostname or 'youtube-nocookie.com' in hostname:
-        if path.startswith('/watch'):
-            return parse_qs(parsed_url.query).get('v', [None])[0]
-        if path.startswith('/shorts/') or path.startswith('/embed/'):
-            parts = path.split('/')
-            return parts[2] if len(parts) > 2 else None
-        if path.startswith('/live/'):
-            return parse_qs(parsed_url.query).get('v', [None])[0] or (path.split('/')[2] if len(path.split('/')) > 2 else None)
-
-    return None
 
 HOME_TEMPLATE = """
 <!doctype html>
@@ -61,7 +34,7 @@ HOME_TEMPLATE = """
         
         <form method="POST" action="/update_config">
             <label>YouTube 直播 Link：</label>
-            <input type="text" name="video_url" placeholder="https://www.youtube.com/watch?v=..." value="{{ video_url }}" required>
+            <input type="text" name="video_url" value="{{ video_url }}" placeholder="https://www.youtube.com/watch?v=..." required>
             
             <label>選擇開始日期：</label>
             <input type="date" name="start_date" value="{{ start_date }}" required>
@@ -83,7 +56,6 @@ HOME_TEMPLATE = """
     </div>
 
     <script>
-        // 取得 Python 傳入嘅日期同時間字串，組成標準時間格式
         const targetDateStr = "{{ start_date }}T{{ start_time }}:00";
         const targetTime = new Date(targetDateStr).getTime();
 
@@ -98,14 +70,12 @@ HOME_TEMPLATE = """
             }
 
             if (distance < 0) {
-                // 如果已經過咗設定時間，計算「已開始幾耐」
                 const elapsed = Math.abs(distance);
                 const hours = Math.floor((elapsed % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
                 const minutes = Math.floor((elapsed % (1000 * 60 * 60)) / (1000 * 60));
                 const seconds = Math.floor((elapsed % (1000 * 60)) / 1000);
                 countdownElem.innerHTML = `🔥 已開始 ${hours}時 ${minutes}分 ${seconds}秒`;
             } else {
-                // 如果未到，進行倒數
                 const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
                 const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
                 const seconds = Math.floor((distance % (1000 * 60)) / 1000);
@@ -113,7 +83,6 @@ HOME_TEMPLATE = """
             }
         }
 
-        // 每秒更新一次計時器
         setInterval(updateTimer, 1000);
         updateTimer();
     </script>
@@ -124,34 +93,38 @@ HOME_TEMPLATE = """
 @app.route('/')
 def index():
     return render_template_string(
-        HOME_TEMPLATE,
-        chat_status=current_chat_id,
-        start_date=start_date,
-        start_time=start_time,
-        video_url=current_video_url,
+        HOME_TEMPLATE, 
+        chat_status=current_chat_id, 
+        start_date=start_date, 
+        start_time=start_time, 
+        video_url=current_video_url
     )
 
 @app.route('/update_config', methods=['POST'])
 def update_config():
-    global current_chat_id, current_video_url, start_date, start_time
-    video_url = request.form.get('video_url', '').strip()
+    global current_chat_id, start_date, start_time, current_video_url
+    current_video_url = request.form.get('video_url')
     start_date = request.form.get('start_date')
     start_time = request.form.get('start_time')
-    current_video_url = video_url
-
-    # 驗證同解析 YouTube URL
-    video_id = extract_youtube_video_id(video_url)
+    
+    parsed_url = urlparse.urlparse(current_video_url)
+    if parsed_url.netloc == 'youtu.be':
+        video_id = parsed_url.path[1:]
+    else:
+        query_params = urlparse.parse_qs(parsed_url.query)
+        video_id = query_params.get('v', [None])[0]
+    
     if video_id:
         current_chat_id = f"已綁定 (Video ID: {video_id})"
     else:
         current_chat_id = "❌ 連結格式錯誤，請重新輸入"
-
+        
     return render_template_string(
-        HOME_TEMPLATE,
-        chat_status=current_chat_id,
-        start_date=start_date,
-        start_time=start_time,
-        video_url=current_video_url,
+        HOME_TEMPLATE, 
+        chat_status=current_chat_id, 
+        start_date=start_date, 
+        start_time=start_time, 
+        video_url=current_video_url
     )
 
 if __name__ == '__main__':
