@@ -7,8 +7,8 @@
         * { box-sizing: border-box; }
         body { 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
-            background: #9C5138; 
-            color: #3b231b; 
+            background: #F0F2F5; 
+            color: #1A1A1A; 
             margin: 0; 
             padding: 30px; 
             display: flex;
@@ -17,31 +17,31 @@
             min-height: 100vh;
         }
         .dashboard-container {
-            background: #D0C9BA;
+            background: #FFFFFF;
             width: 1100px;
             padding: 30px;
             border-radius: 28px;
-            box-shadow: 0 15px 40px rgba(0,0,0,0.4);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.08);
             display: grid;
             grid-template-columns: 350px 300px 350px;
             gap: 25px;
         }
         .header-top {
             grid-column: 1 / -1;
-            background: #c3bcae;
+            background: #F8F9FA;
             padding: 15px 20px;
             border-radius: 16px;
             display: flex;
             gap: 15px;
             align-items: center;
-            border: 1px solid #b5ab9d;
+            border: 1px solid #E4E6EB;
         }
         .header-top input, .header-top select {
             padding: 9px 12px;
             border-radius: 8px;
-            border: 1px solid #b5ab9d;
-            background: #e2dcd0;
-            color: #3b231b;
+            border: 1px solid #CCD0D5;
+            background: #FFFFFF;
+            color: #1A1A1A;
             font-size: 13px;
             outline: none;
         }
@@ -51,8 +51,8 @@
             padding: 9px 16px;
             border-radius: 8px;
             border: none;
-            background: #9C5138;
-            color: #D0C9BA;
+            background: #1A1A1A;
+            color: #FFFFFF;
             font-weight: bold;
             cursor: pointer;
             font-size: 13px;
@@ -61,68 +61,68 @@
 
         /* 左側：倒數時鐘核心區 */
         .left-section {
-            background: #c3bcae;
+            background: #F8F9FA;
             border-radius: 20px;
             padding: 25px;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            border: 1px solid #b5ab9d;
+            border: 1px solid #E4E6EB;
             text-align: center;
         }
         .timer-circle {
             width: 220px;
             height: 220px;
             border-radius: 50%;
-            border: 8px solid #9C5138;
+            border: 8px solid #1A1A1A;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            background: #D0C9BA;
-            box-shadow: inset 0 5px 15px rgba(0,0,0,0.1);
+            background: #FFFFFF;
+            box-shadow: inset 0 5px 15px rgba(0,0,0,0.05);
             margin-bottom: 20px;
         }
         .timer-circle span {
             font-size: 28px;
-            color: #9C5138;
+            color: #1A1A1A;
             font-weight: bold;
             letter-spacing: 1px;
         }
         .status-text {
             font-size: 13px;
-            color: #6a5d53;
+            color: #65676B;
             margin-top: 10px;
         }
 
-        /* 中間：日曆與香港時間區改為左右結構 */
+        /* 中間：左月份、右日期列 + 香港即時時間 */
         .middle-section {
             display: flex;
             flex-direction: column;
             gap: 15px;
         }
         .calendar-widget-split {
-            background: #c3bcae;
+            background: #F8F9FA;
             padding: 12px;
             border-radius: 16px;
-            border: 1px solid #b5ab9d;
+            border: 1px solid #E4E6EB;
             display: flex;
             align-items: center;
             gap: 10px;
         }
         .cal-month-box {
-            background: #D0C9BA;
+            background: #FFFFFF;
             padding: 15px 10px;
             border-radius: 12px;
             text-align: center;
             min-width: 85px;
-            border: 1px solid #b5ab9d;
+            border: 1px solid #E4E6EB;
         }
         .cal-month-box .month-name {
             font-size: 14px;
             font-weight: bold;
-            color: #9C5138;
+            color: #1A1A1A;
         }
         .cal-days-right {
             display: flex;
@@ -135,63 +135,68 @@
             padding: 6px 3px;
             border-radius: 10px;
             font-size: 10px;
-            color: #6a5d53;
-            background: #D0C9BA;
+            color: #65676B;
+            background: #FFFFFF;
             flex: 1;
+            border: 1px solid #E4E6EB;
         }
         .cal-day-item.active {
-            background: #9C5138;
-            color: #D0C9BA;
+            background: #1A1A1A;
+            color: #FFFFFF;
             font-weight: bold;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+            border-color: #1A1A1A;
         }
         .cal-day-item.active .day-num {
-            color: #D0C9BA;
+            color: #FFFFFF;
         }
         .cal-day-item .day-num {
             font-size: 12px;
             font-weight: bold;
-            color: #3b231b;
+            color: #1A1A1A;
             margin-top: 2px;
         }
 
         .widget-box {
-            background: #c3bcae;
+            background: #F8F9FA;
             padding: 18px;
             border-radius: 16px;
-            border: 1px solid #b5ab9d;
+            border: 1px solid #E4E6EB;
             font-size: 13px;
             text-align: center;
         }
 
         /* 右側：Super Chat 排行榜 */
         .right-section {
-            background: #c3bcae;
+            background: #F8F9FA;
             border-radius: 20px;
             padding: 20px;
-            border: 1px solid #b5ab9d;
+            border: 1px solid #E4E6EB;
             display: flex;
             flex-direction: column;
             gap: 12px;
         }
         .right-section h3 {
             margin: 0 0 5px 0;
-            color: #9C5138;
+            color: #1A1A1A;
             font-size: 15px;
             text-align: center;
         }
         .sc-card {
-            background: #D0C9BA;
+            background: #FFFFFF;
             padding: 12px 15px;
             border-radius: 12px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-left: 5px solid #9C5138;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            border-left: 5px solid #1A1A1A;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.03);
+            border-top: 1px solid #E4E6EB;
+            border-right: 1px solid #E4E6EB;
+            border-bottom: 1px solid #E4E6EB;
         }
-        .sc-name { font-weight: bold; font-size: 13px; color: #3b231b; }
-        .sc-amount { color: #9C5138; font-weight: bold; font-size: 13px; }
+        .sc-name { font-weight: bold; font-size: 13px; color: #1A1A1A; }
+        .sc-amount { color: #1A1A1A; font-weight: bold; font-size: 13px; }
     </style>
 </head>
 <body>
@@ -208,15 +213,15 @@
                 <option value="4">4H</option>
                 <option value="4.5" selected>4.5H</option>
             </select>
-            <button type="button" onclick="startTimer()" style="background: #2e5a36;">🚀 Start</button>
-            <button type="button" onclick="resetTimer()" style="background: #9C5138;">🔄 重設</button>
+            <button type="button" onclick="startTimer()" style="background: #2E7D32;">🚀 Start</button>
+            <button type="button" onclick="resetTimer()" style="background: #1A1A1A;">🔄 重設</button>
         </div>
 
         <!-- 左側：倒數時鐘 -->
         <div class="left-section">
             <div class="timer-circle">
                 <span id="countdown">04:30:00</span>
-                <span style="font-size: 11px; color: #6a5d53; margin-top: 5px;">倒數狀態</span>
+                <span style="font-size: 11px; color: #65676B; margin-top: 5px;">倒數狀態</span>
             </div>
             <div class="status-text" id="statusBox">狀態：尚未綁定直播</div>
         </div>
@@ -225,7 +230,7 @@
         <div class="middle-section">
             <div class="calendar-widget-split">
                 <div class="cal-month-box">
-                    <div style="font-size: 10px; color: #6a5d53;">Month</div>
+                    <div style="font-size: 10px; color: #65676B;">Month</div>
                     <div class="month-name" id="current-month-year">July</div>
                 </div>
                 <div class="cal-days-right" id="calendar-days-container">
@@ -234,9 +239,9 @@
             </div>
 
             <div class="widget-box">
-                <h4 style="margin: 0 0 5px 0; color: #9C5138; font-size: 13px;">🇭🇰 香港即時時間</h4>
-                <div style="font-weight: bold; color: #3b231b; font-size: 18px; letter-spacing: 1px;" id="hk-realtime">--:--:--</div>
-                <div style="font-size: 11px; color: #6a5d53; margin-top: 3px;" id="hk-realdate">----/--/--</div>
+                <h4 style="margin: 0 0 5px 0; color: #1A1A1A; font-size: 13px;">🇭🇰 香港即時時間</h4>
+                <div style="font-weight: bold; color: #1A1A1A; font-size: 18px; letter-spacing: 1px;" id="hk-realtime">--:--:--</div>
+                <div style="font-size: 11px; color: #65676B; margin-top: 3px;" id="hk-realdate">----/--/--</div>
             </div>
         </div>
 
@@ -255,7 +260,7 @@
                 <span class="sc-name">3. Supporter_C</span>
                 <span class="sc-amount">$HKD 150</span>
             </div>
-            <div style="text-align: center; font-size: 11px; color: #6a5d53; margin-top: auto;">等待實時 SC 接入...</div>
+            <div style="text-align: center; font-size: 11px; color: #65676B; margin-top: auto;">等待實時 SC 接入...</div>
         </div>
     </div>
 
@@ -276,7 +281,7 @@
             const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
             document.getElementById("current-month-year").innerText = monthNames[hkDate.getMonth()];
 
-            // 渲染本週 7 日 (以當前星期日到星期六為一列)
+            // 渲染本週 7 日
             const container = document.getElementById("calendar-days-container");
             container.innerHTML = "";
 
