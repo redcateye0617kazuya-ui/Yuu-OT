@@ -20,18 +20,21 @@
     <div class="card">
         <h2>加班台控制台</h2>
         
-        <form method="POST" action="/update_config">
-            <label>YouTube 直播 Link：</label>
-            <input type="text" name="video_url" value="{{ video_url }}" placeholder="https://www.youtube.com/watch?v=..." required>
-            
-            <label>選擇開始日期：</label>
-            <input type="date" name="start_date" value="{{ start_date }}" required>
-            
-            <label>選擇開始鐘數：</label>
-            <input type="time" name="start_time" value="{{ start_time }}" required>
-            
-            <button type="submit">儲存設定與更新計時</button>
-        </form>
+       <!-- Form 入面加多個掣 -->
+<form method="POST" action="/update_config">
+    <label>YouTube 直播 Link：</label>
+    <input type="text" name="video_url" value="{{ video_url }}" placeholder="https://www.youtube.com/watch?v=..." required>
+    
+    <label>開始日期：</label>
+    <input type="date" name="start_date" value="{{ start_date }}" required>
+    
+    <label>開台時間：</label>
+    <input type="time" name="start_time" value="{{ start_time }}" required>
+    
+    <!-- 禁呢個掣先至真正 Start -->
+    <button type="submit" name="action" value="start" style="background: #2ed573; margin-top: 15px;">🚀 Start 開始計時</button>
+    <button type="submit" name="action" value="reset" style="background: #ffa502; margin-top: 8px;">🔄 重設狀態</button>
+</form>
 
         <div class="timer-box">
             <p style="margin: 0 0 5px 0; font-size: 12px; color: #888;">計時器狀態：</p>
