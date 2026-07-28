@@ -2,134 +2,216 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="utf-8">
-    <title>加班台 Super Chat 記錄器</title>
+    <title>加班台 Dashboard</title>
     <style>
-        /* 採用圖 1 嘅高級棕色系背景與米色主調 */
+        * { box-sizing: border-box; }
         body { 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
             background: #9C5138; 
             color: #3b231b; 
-            text-align: center; 
-            padding-top: 40px; 
             margin: 0; 
+            padding: 30px; 
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
         }
-        .card { 
-            background: #D0C9BA; 
-            padding: 35px; 
-            border-radius: 24px; 
-            display: inline-block; 
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3); 
-            width: 420px; 
-            text-align: left; 
+        .dashboard-container {
+            background: #D0C9BA;
+            width: 1050px;
+            padding: 30px;
+            border-radius: 28px;
+            box-shadow: 0 15px 40px rgba(0,0,0,0.4);
+            display: grid;
+            grid-template-columns: 360px 240px 360px;
+            gap: 25px;
         }
-        h2 { 
-            text-align: center; 
-            color: #9C5138; 
-            margin-top: 0; 
-            font-size: 24px;
-            letter-spacing: 1px;
+        .header-top {
+            grid-column: 1 / -1;
+            background: #c3bcae;
+            padding: 15px 20px;
+            border-radius: 16px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            border: 1px solid #b5ab9d;
         }
-        label { 
-            font-size: 13px; 
-            color: #6a5d53; 
-            display: block; 
-            margin-top: 14px; 
-            font-weight: bold; 
-        }
-        input[type="text"], input[type="date"], select { 
-            width: 100%; 
-            padding: 11px; 
-            margin-top: 6px; 
-            border-radius: 8px; 
-            border: 1px solid #b5ab9d; 
-            background: #e2dcd0; 
-            color: #3b231b; 
-            box-sizing: border-box; 
-            font-size: 14px; 
+        .header-top input, .header-top select {
+            padding: 9px 12px;
+            border-radius: 8px;
+            border: 1px solid #b5ab9d;
+            background: #e2dcd0;
+            color: #3b231b;
+            font-size: 13px;
             outline: none;
         }
-        input:focus, select:focus {
-            border-color: #9C5138;
+        .header-top input[type="text"] { flex: 2; }
+        .header-top select { flex: 1; }
+        .header-top button {
+            padding: 9px 16px;
+            border-radius: 8px;
+            border: none;
+            background: #9C5138;
+            color: #D0C9BA;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 13px;
         }
-        button { 
-            background: #9C5138; 
-            color: #D0C9BA; 
-            border: none; 
-            padding: 12px; 
-            width: 100%; 
-            border-radius: 8px; 
-            cursor: pointer; 
-            font-weight: bold; 
-            font-size: 15px; 
-            margin-top: 18px; 
-            transition: opacity 0.2s;
+        .header-top button:hover { opacity: 0.85; }
+
+        /* 左側：倒數計時核心區（代替心臟位置） */
+        .left-section {
+            background: #c3bcae;
+            border-radius: 20px;
+            padding: 25px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #b5ab9d;
+            text-align: center;
         }
-        button:hover { 
-            opacity: 0.85; 
+        .timer-circle {
+            width: 220px;
+            height: 220px;
+            border-radius: 50%;
+            border: 8px solid #9C5138;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: #D0C9BA;
+            box-shadow: inset 0 5px 15px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
         }
-        .status { 
-            margin-top: 15px; 
-            color: #2e5a36; 
-            font-size: 13px; 
-            text-align: center; 
-            background: #c3bcae; 
-            padding: 10px; 
-            border-radius: 8px; 
+        .timer-circle span {
+            font-size: 28px;
+            color: #9C5138;
+            font-weight: bold;
+            letter-spacing: 1px;
         }
-        .timer-box { 
-            background: #c3bcae; 
-            padding: 15px; 
-            border-radius: 10px; 
-            text-align: center; 
-            margin-top: 20px; 
-            border: 1px solid #b5ab9d; 
+        .status-text {
+            font-size: 13px;
+            color: #6a5d53;
+            margin-top: 10px;
         }
-        .timer-box span { 
-            font-size: 26px; 
-            color: #9C5138; 
-            font-weight: bold; 
-            letter-spacing: 1.5px;
+
+        /* 中間：日曆與控制狀態區 */
+        .middle-section {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
         }
+        .widget-box {
+            background: #c3bcae;
+            padding: 18px;
+            border-radius: 16px;
+            border: 1px solid #b5ab9d;
+            font-size: 13px;
+        }
+        .widget-box h4 {
+            margin: 0 0 10px 0;
+            color: #9C5138;
+            font-size: 14px;
+        }
+
+        /* 右側：Super Chat 排行榜 */
+        .right-section {
+            background: #c3bcae;
+            border-radius: 20px;
+            padding: 20px;
+            border: 1px solid #b5ab9d;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .right-section h3 {
+            margin: 0 0 5px 0;
+            color: #9C5138;
+            font-size: 15px;
+            text-align: center;
+        }
+        .sc-card {
+            background: #D0C9BA;
+            padding: 12px 15px;
+            border-radius: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-left: 5px solid #9C5138;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        .sc-name { font-weight: bold; font-size: 13px; color: #3b231b; }
+        .sc-amount { color: #9C5138; font-weight: bold; font-size: 13px; }
     </style>
 </head>
 <body>
-    <div class="card">
-        <h2>加班台控制台</h2>
-        
-        <form id="configForm" onsubmit="return false;">
-            <label>YouTube 直播 Link：</label>
-            <input type="text" id="video_url" placeholder="https://www.youtube.com/watch?v=..." required>
-            
-            <label>開始日期：</label>
-            <input type="date" id="start_date" required>
 
-            <label>基本開鐘數：</label>
+    <div class="dashboard-container">
+        <!-- 頂部：入 Link 區 -->
+        <div class="header-top">
+            <input type="text" id="video_url" placeholder="YouTube 直播 Link..." required>
             <select id="duration">
-                <option value="2">2 小時 (2H)</option>
-                <option value="2.5">2.5 小時 (2.5H)</option>
-                <option value="3">3 小時 (3H)</option>
-                <option value="3.5">3.5 小時 (3.5H)</option>
-                <option value="4">4 小時 (4H)</option>
-                <option value="4.5" selected>4.5 小時 (4.5H)</option>
+                <option value="2">2H</option>
+                <option value="2.5">2.5H</option>
+                <option value="3">3H</option>
+                <option value="3.5">3.5H</option>
+                <option value="4">4H</option>
+                <option value="4.5" selected>4.5H</option>
             </select>
-            
-            <button type="button" onclick="startTimer()">🚀 Start 開始計時</button>
-            <button type="button" onclick="resetTimer()" style="background: #7a6d63; margin-top: 8px;">🔄 重設狀態</button>
-        </form>
-
-        <div class="timer-box">
-            <p style="margin: 0 0 5px 0; font-size: 12px; color: #6a5d53;">計時器狀態：</p>
-            <span id="countdown">⏸️ 尚未按 Start</span>
+            <button type="button" onclick="startTimer()" style="background: #2e5a36;">🚀 Start</button>
+            <button type="button" onclick="resetTimer()" style="background: #9C5138;">🔄 重設</button>
         </div>
 
-        <div class="status" id="statusBox">
-            <p style="margin: 0;"><strong>狀態：</strong>尚未設定直播</p>
+        <!-- 左側：倒數時鐘（代替心臟位置） -->
+        <div class="left-section">
+            <div class="timer-circle">
+                <span id="countdown">04:30:00</span>
+                <span style="font-size: 11px; color: #6a5d53; margin-top: 5px;">倒數狀態</span>
+            </div>
+            <div class="status-text" id="statusBox">狀態：尚未綁定直播</div>
+        </div>
+
+        <!-- 中間：日曆與系統資訊 -->
+        <div class="middle-section">
+            <div class="widget-box">
+                <h4>📅 日曆檢視</h4>
+                <div style="text-align: center; font-weight: bold; color: #3b231b; font-size: 15px;" id="current-date-display">2026-07-28</div>
+                <div style="font-size: 11px; text-align: center; color: #6a5d53; margin-top: 5px;">今日開台排期中</div>
+            </div>
+            <div class="widget-box" style="flex-grow: 1;">
+                <h4>⚙️ 系統狀態</h4>
+                <p style="margin: 5px 0; color: #6a5d53;">連線：正常運作</p>
+                <p style="margin: 5px 0; color: #6a5d53;">記錄模式：即時更新</p>
+            </div>
+        </div>
+
+        <!-- 右側：Super Chat 排行榜 -->
+        <div class="right-section">
+            <h3>🏆 Super Chat 排行榜</h3>
+            <div class="sc-card">
+                <span class="sc-name">1. Viewer_A</span>
+                <span class="sc-amount">$HKD 500</span>
+            </div>
+            <div class="sc-card">
+                <span class="sc-name">2. Fan_B</span>
+                <span class="sc-amount">$HKD 320</span>
+            </div>
+            <div class="sc-card">
+                <span class="sc-name">3. Supporter_C</span>
+                <span class="sc-amount">$HKD 150</span>
+            </div>
+            <div style="text-align: center; font-size: 11px; color: #6a5d53; margin-top: auto;">等待實時 SC 接入...</div>
         </div>
     </div>
 
     <script>
         let targetEndTime = null;
         let timerInterval = null;
+
+        // 自動顯示今日日期
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('current-date-display').innerText = today;
 
         function startTimer() {
             const videoUrl = document.getElementById("video_url").value;
@@ -143,9 +225,9 @@
             }
 
             if (videoId) {
-                statusBox.innerHTML = `<p style="margin: 0;"><strong>狀態：</strong>已綁定 (Video ID: ${videoId})</p>`;
+                statusBox.innerHTML = `狀態：已綁定 (${videoId})`;
             } else {
-                statusBox.innerHTML = `<p style="margin: 0; color: #9c2c1e;"><strong>狀態：</strong>❌ 連結格式錯誤</p>`;
+                statusBox.innerHTML = `狀態：❌ 連結格式錯誤`;
                 return;
             }
 
@@ -171,7 +253,7 @@
                 const hours = Math.floor((elapsed % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
                 const minutes = Math.floor((elapsed % (1000 * 60 * 60)) / (1000 * 60));
                 const seconds = Math.floor((elapsed % (1000 * 60)) / 1000);
-                countdownElem.innerHTML = `🔥 已超時 ${hours}時 ${minutes}分 ${seconds}秒`;
+                countdownElem.innerHTML = `+${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
             } else {
                 const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
                 const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
@@ -186,8 +268,8 @@
                 clearInterval(timerInterval);
                 timerInterval = null;
             }
-            document.getElementById("countdown").innerHTML = "⏸️ 尚未按 Start";
-            document.getElementById("statusBox").innerHTML = `<p style="margin: 0;"><strong>狀態：</strong>已重設</p>`;
+            document.getElementById("countdown").innerHTML = "04:30:00";
+            document.getElementById("statusBox").innerHTML = "狀態：已重設";
         }
     </script>
 </body>
