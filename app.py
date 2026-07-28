@@ -7,8 +7,6 @@ app = Flask(__name__)
 current_chat_id = "尚未設定直播"
 current_video_url = ""
 start_date = "2026-07-28"
-start_time = "20:00"
-selected_duration = "2"   # 預設 2 小時
 is_started = False       # 係咪禁咗 Start
 
 @app.route('/')
@@ -17,19 +15,15 @@ def index():
         'index.html', 
         chat_status=current_chat_id, 
         start_date=start_date, 
-        start_time=start_time, 
         video_url=current_video_url,
-        selected_duration=selected_duration,
         is_started=str(is_started).lower()
     )
 
 @app.route('/update_config', methods=['POST'])
 def update_config():
-    global current_chat_id, start_date, start_time, current_video_url, selected_duration, is_started
+    global current_chat_id, start_date, current_video_url, is_started
     current_video_url = request.form.get('video_url')
     start_date = request.form.get('start_date')
-    start_time = request.form.get('start_time')
-    selected_duration = request.form.get('duration')
     
     action = request.form.get('action')
     if action == 'start':
@@ -53,9 +47,7 @@ def update_config():
         'index.html', 
         chat_status=current_chat_id, 
         start_date=start_date, 
-        start_time=start_time, 
         video_url=current_video_url,
-        selected_duration=selected_duration,
         is_started=str(is_started).lower()
     )
 
