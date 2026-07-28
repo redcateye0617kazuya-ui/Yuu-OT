@@ -3,38 +3,26 @@
 <head>
     <meta charset="utf-8">
     <title>加班台 Super Chat 記錄器</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121212; color: #fff; text-align: center; padding-top: 30px; margin: 0; }
-        .card { background: #1e1e1e; padding: 30px; border-radius: 12px; display: inline-block; box-shadow: 0 4px 20px rgba(0,0,0,0.6); width: 420px; text-align: left; }
-        h2 { text-align: center; color: #ff4757; margin-top: 0; }
-        label { font-size: 13px; color: #bbb; display: block; margin-top: 12px; font-weight: bold; }
-        input[type="text"], input[type="date"], input[type="time"] { width: 100%; padding: 10px; margin-top: 5px; border-radius: 6px; border: 1px solid #444; background: #2a2a2a; color: #fff; box-sizing: border-box; font-size: 14px; }
-        button { background: #ff4757; color: white; border: none; padding: 12px; width: 100%; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 15px; margin-top: 20px; }
-        button:hover { background: #ff6b81; }
-        .status { margin-top: 15px; color: #2ed573; font-size: 13px; text-align: center; background: #252525; padding: 8px; border-radius: 5px; }
-        .timer-box { background: #252525; padding: 12px; border-radius: 6px; text-align: center; margin-top: 15px; border: 1px solid #333; }
-        .timer-box span { font-size: 18px; color: #ffa502; font-weight: bold; }
-    </style>
+    <!-- CSS 樣式省略 -->
 </head>
 <body>
     <div class="card">
         <h2>加班台控制台</h2>
         
-       <!-- Form 入面加多個掣 -->
-<form method="POST" action="/update_config">
-    <label>YouTube 直播 Link：</label>
-    <input type="text" name="video_url" value="{{ video_url }}" placeholder="https://www.youtube.com/watch?v=..." required>
-    
-    <label>開始日期：</label>
-    <input type="date" name="start_date" value="{{ start_date }}" required>
-    
-    <label>開台時間：</label>
-    <input type="time" name="start_time" value="{{ start_time }}" required>
-    
-    <!-- 禁呢個掣先至真正 Start -->
-    <button type="submit" name="action" value="start" style="background: #2ed573; margin-top: 15px;">🚀 Start 開始計時</button>
-    <button type="submit" name="action" value="reset" style="background: #ffa502; margin-top: 8px;">🔄 重設狀態</button>
-</form>
+        <!-- 表單部分 -->
+        <form method="POST" action="/update_config">
+            <label>YouTube 直播 Link：</label>
+            <input type="text" name="video_url" value="{{ video_url }}" placeholder="https://www.youtube.com/watch?v=..." required>
+            
+            <label>開始日期：</label>
+            <input type="date" name="start_date" value="{{ start_date }}" required>
+            
+            <label>開台時間：</label>
+            <input type="time" name="start_time" value="{{ start_time }}" required>
+            
+            <button type="submit" name="action" value="start" style="background: #2ed573; margin-top: 15px;">🚀 Start 開始計時</button>
+            <button type="submit" name="action" value="reset" style="background: #ffa502; margin-top: 8px;">🔄 重設狀態</button>
+        </form>
 
         <div class="timer-box">
             <p style="margin: 0 0 5px 0; font-size: 12px; color: #888;">計時器狀態：</p>
@@ -46,26 +34,29 @@
         </div>
     </div>
 
+    <!-- 👇 呢個位置（即係 </body> 之前），成段放落去： -->
     <script>
-        const targetDateStr = "{{ start_date }}T{{ start_time }}:00";
-        const targetTime = new Date(targetDateStr).getTime();
+        const isStarted = {{ is_started }}; 
 
         function updateTimer() {
-            const now = new Date().getTime();
-            const distance = targetTime - now;
             const countdownElem = document.getElementById("countdown");
 
-            if (isNaN(targetTime)) {
-                countdownElem.innerHTML = "❌ 日期格式錯誤";
+            if (!isStarted) {
+                countdownElem.innerHTML = "⏸️ 尚未按 Start，等待中...";
                 return;
             }
+
+            const targetDateStr = "{{ start_date }}T{{ start_time }}:00";
+            const targetTime = new Date(targetDateStr).getTime();
+            const now = new Date().getTime();
+            const distance = targetTime - now;
 
             if (distance < 0) {
                 const elapsed = Math.abs(distance);
                 const hours = Math.floor((elapsed % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
                 const minutes = Math.floor((elapsed % (1000 * 60 * 60)) / (1000 * 60));
                 const seconds = Math.floor((elapsed % (1000 * 60)) / 1000);
-                countdownElem.innerHTML = `🔥 已開始 ${hours}時 ${minutes}分 ${seconds}秒`;
+                countdownElem.innerHTML = `🔥 已開台 ${hours}時 ${minutes}分 ${seconds}秒`;
             } else {
                 const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
                 const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
