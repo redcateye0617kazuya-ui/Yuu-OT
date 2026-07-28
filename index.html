@@ -3,13 +3,23 @@
 <head>
     <meta charset="utf-8">
     <title>加班台 Super Chat 記錄器</title>
-    <!-- CSS 樣式省略 -->
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121212; color: #fff; text-align: center; padding-top: 30px; margin: 0; }
+        .card { background: #1e1e1e; padding: 30px; border-radius: 12px; display: inline-block; box-shadow: 0 4px 20px rgba(0,0,0,0.6); width: 420px; text-align: left; }
+        h2 { text-align: center; color: #ff4757; margin-top: 0; }
+        label { font-size: 13px; color: #bbb; display: block; margin-top: 12px; font-weight: bold; }
+        input[type="text"], input[type="date"], input[type="time"], select { width: 100%; padding: 10px; margin-top: 5px; border-radius: 6px; border: 1px solid #444; background: #2a2a2a; color: #fff; box-sizing: border-box; font-size: 14px; }
+        button { background: #ff4757; color: white; border: none; padding: 12px; width: 100%; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 15px; margin-top: 15px; }
+        button:hover { opacity: 0.9; }
+        .status { margin-top: 15px; color: #2ed573; font-size: 13px; text-align: center; background: #252525; padding: 8px; border-radius: 5px; }
+        .timer-box { background: #252525; padding: 12px; border-radius: 6px; text-align: center; margin-top: 15px; border: 1px solid #333; }
+        .timer-box span { font-size: 18px; color: #ffa502; font-weight: bold; }
+    </style>
 </head>
 <body>
     <div class="card">
         <h2>加班台控制台</h2>
         
-        <!-- 表單部分 -->
         <form method="POST" action="/update_config">
             <label>YouTube 直播 Link：</label>
             <input type="text" name="video_url" value="{{ video_url }}" placeholder="https://www.youtube.com/watch?v=..." required>
@@ -19,8 +29,18 @@
             
             <label>開台時間：</label>
             <input type="time" name="start_time" value="{{ start_time }}" required>
+
+            <label>基本開鐘數：</label>
+            <select name="duration">
+                <option value="2" {% if selected_duration == '2' %}selected{% endif %}>2 小時 (2H)</option>
+                <option value="2.5" {% if selected_duration == '2.5' %}selected{% endif %}>2.5 小時 (2.5H)</option>
+                <option value="3" {% if selected_duration == '3' %}selected{% endif %}>3 小時 (3H)</option>
+                <option value="3.5" {% if selected_duration == '3.5' %}selected{% endif %}>3.5 小時 (3.5H)</option>
+                <option value="4" {% if selected_duration == '4' %}selected{% endif %}>4 小時 (4H)</option>
+                <option value="4.5" {% if selected_duration == '4.5' %}selected{% endif %}>4.5 小時 (4.5H)</option>
+            </select>
             
-            <button type="submit" name="action" value="start" style="background: #2ed573; margin-top: 15px;">🚀 Start 開始計時</button>
+            <button type="submit" name="action" value="start" style="background: #2ed573;">🚀 Start 開始計時</button>
             <button type="submit" name="action" value="reset" style="background: #ffa502; margin-top: 8px;">🔄 重設狀態</button>
         </form>
 
@@ -34,9 +54,9 @@
         </div>
     </div>
 
-    <!-- 👇 呢個位置（即係 </body> 之前），成段放落去： -->
     <script>
-        const isStarted = {{ is_started }}; 
+        const isStarted = {{ is_started }};
+        const hoursToAdd = parseFloat("{{ selected_duration }}");
 
         function updateTimer() {
             const countdownElem = document.getElementById("countdown");
@@ -46,17 +66,18 @@
                 return;
             }
 
-            const targetDateStr = "{{ start_date }}T{{ start_time }}:00";
-            const targetTime = new Date(targetDateStr).getTime();
+            // 以當刻（即刻）作為基準，加上所選的小時數作為目標時間
             const now = new Date().getTime();
-            const distance = targetTime - now;
+            // 這裡可以選擇：如果係由禁 Start 嗰一刻開始倒數：
+            // 我們把目標時間設定為「現在時間 + 選擇的小時數」
+            if (!window.targetEndTime) {
+                window.targetEndTime = now + (hoursToAdd * 60 * 60 * 1000);
+            }
+
+            const distance = window.targetEndTime - now;
 
             if (distance < 0) {
-                const elapsed = Math.abs(distance);
-                const hours = Math.floor((elapsed % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-                const minutes = Math.floor((elapsed % (1000 * 60 * 60)) / (1000 * 60));
-                const seconds = Math.floor((elapsed % (1000 * 60)) / 1000);
-                countdownElem.innerHTML = `🔥 已開台 ${hours}時 ${minutes}分 ${seconds}秒`;
+                countdownElem.innerHTML = "⏰ 倒數時間已結束！";
             } else {
                 const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
                 const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
