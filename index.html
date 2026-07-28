@@ -9,8 +9,7 @@ current_video_url = ""
 start_date = "2026-07-28"
 start_time = "20:00"
 
-HOME_TEMPLATE = """
-<!doctype html>
+HOME_TEMPLATE = """<!doctype html>
 <html lang="zh-Hant">
 <head>
     <meta charset="utf-8">
@@ -21,7 +20,7 @@ HOME_TEMPLATE = """
         h2 { text-align: center; color: #ff4757; margin-top: 0; }
         label { font-size: 13px; color: #bbb; display: block; margin-top: 12px; font-weight: bold; }
         input[type="text"], input[type="date"], input[type="time"] { width: 100%; padding: 10px; margin-top: 5px; border-radius: 6px; border: 1px solid #444; background: #2a2a2a; color: #fff; box-sizing: border-box; font-size: 14px; }
-        button { background: #ff4757; color: white; border: none; padding: 12px; width: 100%; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 15px; margin-top: 20px; transition: background 0.2s; }
+        button { background: #ff4757; color: white; border: none; padding: 12px; width: 100%; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 15px; margin-top: 20px; }
         button:hover { background: #ff6b81; }
         .status { margin-top: 15px; color: #2ed573; font-size: 13px; text-align: center; background: #252525; padding: 8px; border-radius: 5px; }
         .timer-box { background: #252525; padding: 12px; border-radius: 6px; text-align: center; margin-top: 15px; border: 1px solid #333; }
@@ -87,8 +86,7 @@ HOME_TEMPLATE = """
         updateTimer();
     </script>
 </body>
-</html>
-"""
+</html>"""
 
 @app.route('/')
 def index():
