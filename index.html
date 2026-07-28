@@ -18,12 +18,12 @@
         }
         .dashboard-container {
             background: #D0C9BA;
-            width: 1050px;
+            width: 1100px;
             padding: 30px;
             border-radius: 28px;
             box-shadow: 0 15px 40px rgba(0,0,0,0.4);
             display: grid;
-            grid-template-columns: 360px 240px 360px;
+            grid-template-columns: 350px 300px 350px;
             gap: 25px;
         }
         .header-top {
@@ -59,7 +59,7 @@
         }
         .header-top button:hover { opacity: 0.85; }
 
-        /* 左側：倒數計時核心區（代替心臟位置） */
+        /* 左側：倒數時鐘核心區 */
         .left-section {
             background: #c3bcae;
             border-radius: 20px;
@@ -96,23 +96,62 @@
             margin-top: 10px;
         }
 
-        /* 中間：日曆與控制狀態區 */
+        /* 中間：精美日曆與香港時間區 */
         .middle-section {
             display: flex;
             flex-direction: column;
             gap: 15px;
         }
+        .calendar-widget {
+            background: #c3bcae;
+            padding: 15px;
+            border-radius: 16px;
+            border: 1px solid #b5ab9d;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .cal-arrow {
+            background: none;
+            border: none;
+            font-size: 16px;
+            color: #3b231b;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .cal-days {
+            display: flex;
+            gap: 6px;
+            justify-content: space-between;
+            width: 100%;
+            padding: 0 5px;
+        }
+        .cal-day-item {
+            text-align: center;
+            padding: 8px 6px;
+            border-radius: 12px;
+            font-size: 11px;
+            color: #6a5d53;
+            transition: all 0.2s;
+        }
+        .cal-day-item.active {
+            background: #D0C9BA;
+            color: #9C5138;
+            font-weight: bold;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .cal-day-item .day-num {
+            font-size: 13px;
+            margin-top: 2px;
+        }
+
         .widget-box {
             background: #c3bcae;
             padding: 18px;
             border-radius: 16px;
             border: 1px solid #b5ab9d;
             font-size: 13px;
-        }
-        .widget-box h4 {
-            margin: 0 0 10px 0;
-            color: #9C5138;
-            font-size: 14px;
+            text-align: center;
         }
 
         /* 右側：Super Chat 排行榜 */
@@ -163,7 +202,7 @@
             <button type="button" onclick="resetTimer()" style="background: #9C5138;">🔄 重設</button>
         </div>
 
-        <!-- 左側：倒數時鐘（代替心臟位置） -->
+        <!-- 左側：倒數時鐘 -->
         <div class="left-section">
             <div class="timer-circle">
                 <span id="countdown">04:30:00</span>
@@ -172,17 +211,23 @@
             <div class="status-text" id="statusBox">狀態：尚未綁定直播</div>
         </div>
 
-        <!-- 中間：日曆與系統資訊 -->
+        <!-- 中間：仿照圖片嘅精美橫向日曆與香港即時時間 -->
         <div class="middle-section">
-            <div class="widget-box">
-                <h4>📅 日曆檢視</h4>
-                <div style="text-align: center; font-weight: bold; color: #3b231b; font-size: 15px;" id="current-date-display">2026-07-28</div>
-                <div style="font-size: 11px; text-align: center; color: #6a5d53; margin-top: 5px;">今日開台排期中</div>
+            <div class="widget-box" style="padding: 12px;">
+                <div style="font-size: 12px; color: #6a5d53; margin-bottom: 4px;" id="current-month-year">Month</div>
+                <div class="calendar-widget">
+                    <button class="cal-arrow" onclick="changeWeek(-1)">❮</button>
+                    <div class="cal-days" id="calendar-days-container">
+                        <!-- 動態生成 7 日橫向日曆 -->
+                    </div>
+                    <button class="cal-arrow" onclick="changeWeek(1)">❯</button>
+                </div>
             </div>
-            <div class="widget-box" style="flex-grow: 1;">
-                <h4>⚙️ 系統狀態</h4>
-                <p style="margin: 5px 0; color: #6a5d53;">連線：正常運作</p>
-                <p style="margin: 5px 0; color: #6a5d53;">記錄模式：即時更新</p>
+
+            <div class="widget-box">
+                <h4 style="margin: 0 0 5px 0; color: #9C5138; font-size: 13px;">🇭🇰 香港即時時間</h4>
+                <div style="font-weight: bold; color: #3b231b; font-size: 18px; letter-spacing: 1px;" id="hk-realtime">--:--:--</div>
+                <div style="font-size: 11px; color: #6a5d53; margin-top: 3px;" id="hk-realdate">----/--/--</div>
             </div>
         </div>
 
@@ -208,10 +253,62 @@
     <script>
         let targetEndTime = null;
         let timerInterval = null;
+        let weekOffset = 0;
 
-        // 自動顯示今日日期
-        const today = new Date().toISOString().split('T')[0];
-        document.getElementById('current-date-display').innerText = today;
+        // 渲染香港動態日曆與即時時間
+        function updateHKClockAndCalendar() {
+            const now = new Date();
+            // 轉換為香港時間 (UTC+8)
+            const hkTimeStr = now.toLocaleString("en-US", { timeZone: "Asia/Hong_Kong" });
+            const hkDate = new Date(hkTimeStr);
+
+            // 更新即時時鐘顯示
+            document.getElementById("hk-realtime").innerText = hkDate.toTimeString().split(' ')[0];
+            document.getElementById("hk-realdate").innerText = hkDate.toISOString().split('T')[0];
+
+            // 月份標題
+            const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+            document.getElementById("current-month-year").innerText = monthNames[hkDate.getMonth()];
+
+            // 渲染 7 天橫向日曆 (以當天為中心或加減 weekOffset)
+            const container = document.getElementById("calendar-days-container");
+            container.innerHTML = "";
+
+            // 取得本周基准日
+            let centerDate = new Date(hkDate);
+            centerDate.setDate(centerDate.getDate() + (weekOffset * 7));
+
+            // 找出當週星期日
+            let currentDayOfWeek = centerDate.getDay();
+            let sunday = new Date(centerDate);
+            sunday.setDate(centerDate.getDate() - currentDayOfWeek);
+
+            const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+            
+            for (let i = 0; i < 7; i++) {
+                let d = new Date(sunday);
+                d.setDate(sunday.getDate() + i);
+
+                let isToday = d.toDateString() === hkDate.toDateString();
+                
+                let dayDiv = document.createElement("div");
+                dayDiv.className = `cal-day-item ${isToday && weekOffset === 0 ? 'active' : ''}`;
+                dayDiv.innerHTML = `
+                    <div style="font-size: 10px;">${dayNames[i]}</div>
+                    <div class="day-num">${String(d.getDate()).padStart(2, '0')}</div>
+                `;
+                container.appendChild(dayDiv);
+            }
+        }
+
+        function changeWeek(direction) {
+            weekOffset += direction;
+            updateHKClockAndCalendar();
+        }
+
+        // 每秒更新時鐘
+        setInterval(updateHKClockAndCalendar, 1000);
+        updateHKClockAndCalendar();
 
         function startTimer() {
             const videoUrl = document.getElementById("video_url").value;
