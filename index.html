@@ -4,16 +4,92 @@
     <meta charset="utf-8">
     <title>加班台 Super Chat 記錄器</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121212; color: #fff; text-align: center; padding-top: 30px; margin: 0; }
-        .card { background: #1e1e1e; padding: 30px; border-radius: 12px; display: inline-block; box-shadow: 0 4px 20px rgba(0,0,0,0.6); width: 420px; text-align: left; }
-        h2 { text-align: center; color: #ff4757; margin-top: 0; }
-        label { font-size: 13px; color: #bbb; display: block; margin-top: 12px; font-weight: bold; }
-        input[type="text"], input[type="date"], select { width: 100%; padding: 10px; margin-top: 5px; border-radius: 6px; border: 1px solid #444; background: #2a2a2a; color: #fff; box-sizing: border-box; font-size: 14px; }
-        button { background: #ff4757; color: white; border: none; padding: 12px; width: 100%; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 15px; margin-top: 15px; }
-        button:hover { opacity: 0.9; }
-        .status { margin-top: 15px; color: #2ed573; font-size: 13px; text-align: center; background: #252525; padding: 8px; border-radius: 5px; }
-        .timer-box { background: #252525; padding: 12px; border-radius: 6px; text-align: center; margin-top: 15px; border: 1px solid #333; }
-        .timer-box span { font-size: 18px; color: #ffa502; font-weight: bold; }
+        /* 採用圖 1 嘅高級棕色系背景與米色主調 */
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+            background: #9C5138; 
+            color: #3b231b; 
+            text-align: center; 
+            padding-top: 40px; 
+            margin: 0; 
+        }
+        .card { 
+            background: #D0C9BA; 
+            padding: 35px; 
+            border-radius: 24px; 
+            display: inline-block; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3); 
+            width: 420px; 
+            text-align: left; 
+        }
+        h2 { 
+            text-align: center; 
+            color: #9C5138; 
+            margin-top: 0; 
+            font-size: 24px;
+            letter-spacing: 1px;
+        }
+        label { 
+            font-size: 13px; 
+            color: #6a5d53; 
+            display: block; 
+            margin-top: 14px; 
+            font-weight: bold; 
+        }
+        input[type="text"], input[type="date"], select { 
+            width: 100%; 
+            padding: 11px; 
+            margin-top: 6px; 
+            border-radius: 8px; 
+            border: 1px solid #b5ab9d; 
+            background: #e2dcd0; 
+            color: #3b231b; 
+            box-sizing: border-box; 
+            font-size: 14px; 
+            outline: none;
+        }
+        input:focus, select:focus {
+            border-color: #9C5138;
+        }
+        button { 
+            background: #9C5138; 
+            color: #D0C9BA; 
+            border: none; 
+            padding: 12px; 
+            width: 100%; 
+            border-radius: 8px; 
+            cursor: pointer; 
+            font-weight: bold; 
+            font-size: 15px; 
+            margin-top: 18px; 
+            transition: opacity 0.2s;
+        }
+        button:hover { 
+            opacity: 0.85; 
+        }
+        .status { 
+            margin-top: 15px; 
+            color: #2e5a36; 
+            font-size: 13px; 
+            text-align: center; 
+            background: #c3bcae; 
+            padding: 10px; 
+            border-radius: 8px; 
+        }
+        .timer-box { 
+            background: #c3bcae; 
+            padding: 15px; 
+            border-radius: 10px; 
+            text-align: center; 
+            margin-top: 20px; 
+            border: 1px solid #b5ab9d; 
+        }
+        .timer-box span { 
+            font-size: 26px; 
+            color: #9C5138; 
+            font-weight: bold; 
+            letter-spacing: 1.5px;
+        }
     </style>
 </head>
 <body>
@@ -37,13 +113,13 @@
                 <option value="4.5" selected>4.5 小時 (4.5H)</option>
             </select>
             
-            <button type="button" onclick="startTimer()" style="background: #2ed573;">🚀 Start 開始計時</button>
-            <button type="button" onclick="resetTimer()" style="background: #ffa502; margin-top: 8px;">🔄 重設狀態</button>
+            <button type="button" onclick="startTimer()">🚀 Start 開始計時</button>
+            <button type="button" onclick="resetTimer()" style="background: #7a6d63; margin-top: 8px;">🔄 重設狀態</button>
         </form>
 
         <div class="timer-box">
-            <p style="margin: 0 0 5px 0; font-size: 12px; color: #888;">計時器狀態：</p>
-            <span id="countdown">⏸️ 尚未按 Start，等待中...</span>
+            <p style="margin: 0 0 5px 0; font-size: 12px; color: #6a5d53;">計時器狀態：</p>
+            <span id="countdown">⏸️ 尚未按 Start</span>
         </div>
 
         <div class="status" id="statusBox">
@@ -69,7 +145,7 @@
             if (videoId) {
                 statusBox.innerHTML = `<p style="margin: 0;"><strong>狀態：</strong>已綁定 (Video ID: ${videoId})</p>`;
             } else {
-                statusBox.innerHTML = `<p style="margin: 0; color: #ff4757;"><strong>狀態：</strong>❌ 連結格式錯誤</p>`;
+                statusBox.innerHTML = `<p style="margin: 0; color: #9c2c1e;"><strong>狀態：</strong>❌ 連結格式錯誤</p>`;
                 return;
             }
 
@@ -100,7 +176,7 @@
                 const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
                 const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
                 const seconds = Math.floor((distance % (1000 * 60)) / 1000);
-                countdownElem.innerHTML = `⏳ 倒數 ${hours}時 ${minutes}分 ${seconds}秒`;
+                countdownElem.innerHTML = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
             }
         }
 
@@ -110,7 +186,7 @@
                 clearInterval(timerInterval);
                 timerInterval = null;
             }
-            document.getElementById("countdown").innerHTML = "⏸️ 尚未按 Start，等待中...";
+            document.getElementById("countdown").innerHTML = "⏸️ 尚未按 Start";
             document.getElementById("statusBox").innerHTML = `<p style="margin: 0;"><strong>狀態：</strong>已重設</p>`;
         }
     </script>
