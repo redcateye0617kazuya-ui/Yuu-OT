@@ -3,10 +3,11 @@ import urllib.parse as urlparse
 
 app = Flask(__name__)
 
-# 暫存變數（預設數值）
-current_chat_id = "尚未設定"
-start_date = "2026-07-28"  # 預設開始日期
-start_time = "20:00"       # 預設開始鐘數 (24小時制)
+# 預設變數設定
+current_chat_id = "尚未設定直播"
+# 預設為今日（2026-07-28）同晚上 8 點
+start_date = "2026-07-28"
+start_time = "20:00"
 
 HOME_TEMPLATE = """
 <!doctype html>
@@ -15,15 +16,15 @@ HOME_TEMPLATE = """
     <meta charset="utf-8">
     <title>加班台 Super Chat 記錄器</title>
     <style>
-        body { font-family: sans-serif; background: #121212; color: #fff; text-align: center; padding-top: 30px; }
-        .card { background: #1e1e1e; padding: 25px; border-radius: 12px; display: inline-block; box-shadow: 0 4px 15px rgba(0,0,0,0.5); width: 450px; text-align: left; }
-        h2 { text-align: center; color: #ff4757; }
-        label { font-size: 14px; color: #aaa; display: block; margin-top: 10px; }
-        input[type="text"], input[type="date"], input[type="time"] { width: 100%; padding: 8px; margin: 5px 0 15px 0; border-radius: 5px; border: 1px solid #444; background: #2a2a2a; color: #fff; box-sizing: border-box; }
-        button { background: #ff4757; color: white; border: none; padding: 10px; width: 100%; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121212; color: #fff; text-align: center; padding-top: 30px; margin: 0; }
+        .card { background: #1e1e1e; padding: 30px; border-radius: 12px; display: inline-block; box-shadow: 0 4px 20px rgba(0,0,0,0.6); width: 420px; text-align: left; }
+        h2 { text-align: center; color: #ff4757; margin-top: 0; }
+        label { font-size: 13px; color: #bbb; display: block; margin-top: 12px; font-weight: bold; }
+        input[type="text"], input[type="date"], input[type="time"] { width: 100%; padding: 10px; margin-top: 5px; border-radius: 6px; border: 1px solid #444; background: #2a2a2a; color: #fff; box-sizing: border-box; font-size: 14px; }
+        button { background: #ff4757; color: white; border: none; padding: 12px; width: 100%; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 15px; margin-top: 20px; transition: background 0.2s; }
         button:hover { background: #ff6b81; }
-        .status { margin-top: 15px; color: #2ed573; font-size: 13px; text-align: center; }
-        .timer-box { background: #2a2a2a; padding: 10px; border-radius: 5px; text-align: center; margin-top: 15px; }
+        .status { margin-top: 15px; color: #2ed573; font-size: 13px; text-align: center; background: #252525; padding: 8px; border-radius: 5px; }
+        .timer-box { background: #252525; padding: 12px; border-radius: 6px; text-align: center; margin-top: 15px; border: 1px solid #333; }
         .timer-box span { font-size: 18px; color: #ffa502; font-weight: bold; }
     </style>
 </head>
@@ -32,56 +33,60 @@ HOME_TEMPLATE = """
         <h2>加班台控制台</h2>
         
         <form method="POST" action="/update_config">
-            <label>直播 Link：</label>
+            <label>YouTube 直播 Link：</label>
             <input type="text" name="video_url" placeholder="https://www.youtube.com/watch?v=..." required>
             
-            <label>開始日期：</label>
+            <label>選擇開始日期：</label>
             <input type="date" name="start_date" value="{{ start_date }}" required>
             
-            <label>基本開始鐘數：</label>
+            <label>選擇開始鐘數：</label>
             <input type="time" name="start_time" value="{{ start_time }}" required>
             
-            <button type="submit">儲存設定與綁定</button>
+            <button type="submit">儲存設定與更新計時</button>
         </form>
 
         <div class="timer-box">
-            <p style="margin: 0 0 5px 0; font-size: 12px; color: #888;">距離/已過時間計時器：</p>
+            <p style="margin: 0 0 5px 0; font-size: 12px; color: #888;">計時器狀態：</p>
             <span id="countdown">計算中...</span>
         </div>
 
         <div class="status">
-            <p>當前狀態：{{ chat_status }}</p>
+            <p style="margin: 0;"><strong>狀態：</strong>{{ chat_status }}</p>
         </div>
     </div>
 
     <script>
-        // 簡單的前端 JavaScript 計時器
-        // 組合設定的日期同時間
+        // 取得 Python 傳入嘅日期同時間字串，組成標準時間格式
         const targetDateStr = "{{ start_date }}T{{ start_time }}:00";
         const targetTime = new Date(targetDateStr).getTime();
 
         function updateTimer() {
             const now = new Date().getTime();
             const distance = targetTime - now;
-
             const countdownElem = document.getElementById("countdown");
 
+            if (isNaN(targetTime)) {
+                countdownElem.innerHTML = "❌ 日期格式錯誤";
+                return;
+            }
+
             if (distance < 0) {
-                // 如果已經過咗開始時間，改為顯示「已開播/已過時間」
+                // 如果已經過咗設定時間，計算「已開始幾耐」
                 const elapsed = Math.abs(distance);
                 const hours = Math.floor((elapsed % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
                 const minutes = Math.floor((elapsed % (1000 * 60 * 60)) / (1000 * 60));
                 const seconds = Math.floor((elapsed % (1000 * 60)) / 1000);
-                countdownElem.innerHTML = `已開始 ${hours}時 ${minutes}分 ${seconds}秒`;
+                countdownElem.innerHTML = `🔥 已開始 ${hours}時 ${minutes}分 ${seconds}秒`;
             } else {
-                // 如果未到，顯示倒數
+                // 如果未到，進行倒數
                 const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
                 const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
                 const seconds = Math.floor((distance % (1000 * 60)) / 1000);
-                countdownElem.innerHTML = `倒數 ${hours}時 ${minutes}分 ${seconds}秒`;
+                countdownElem.innerHTML = `⏳ 倒數 ${hours}時 ${minutes}分 ${seconds}秒`;
             }
         }
 
+        // 每秒更新一次計時器
         setInterval(updateTimer, 1000);
         updateTimer();
     </script>
@@ -100,7 +105,7 @@ def update_config():
     start_date = request.form.get('start_date')
     start_time = request.form.get('start_time')
     
-    # 解析 YouTube URL
+    # 驗證同解析 YouTube URL
     parsed_url = urlparse.urlparse(video_url)
     if parsed_url.netloc == 'youtu.be':
         video_id = parsed_url.path[1:]
@@ -109,9 +114,9 @@ def update_config():
         video_id = query_params.get('v', [None])[0]
     
     if video_id:
-        current_chat_id = f"成功綁定 (Video ID: {video_id})"
+        current_chat_id = f"已綁定 (Video ID: {video_id})"
     else:
-        current_chat_id = "❌ 連結格式錯誤"
+        current_chat_id = "❌ 連結格式錯誤，請重新輸入"
         
     return render_template_string(HOME_TEMPLATE, chat_status=current_chat_id, start_date=start_date, start_time=start_time)
 
