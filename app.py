@@ -8,7 +8,8 @@ current_chat_id = "尚未設定直播"
 current_video_url = ""
 start_date = "2026-07-28"
 start_time = "20:00"
-is_started = False  # 記錄係咪已經禁咗 Start
+selected_duration = "2"   # 預設 2 小時
+is_started = False       # 係咪禁咗 Start
 
 @app.route('/')
 def index():
@@ -18,23 +19,24 @@ def index():
         start_date=start_date, 
         start_time=start_time, 
         video_url=current_video_url,
-        is_started=str(is_started).lower()  # 傳畀前端 JavaScript 判斷
+        selected_duration=selected_duration,
+        is_started=str(is_started).lower()
     )
 
 @app.route('/update_config', methods=['POST'])
 def update_config():
-    global current_chat_id, start_date, start_time, current_video_url, is_started
+    global current_chat_id, start_date, start_time, current_video_url, selected_duration, is_started
     current_video_url = request.form.get('video_url')
     start_date = request.form.get('start_date')
     start_time = request.form.get('start_time')
+    selected_duration = request.form.get('duration')
     
-    # 檢查用家係咪禁咗 Start 掣
     action = request.form.get('action')
     if action == 'start':
         is_started = True
     elif action == 'reset':
         is_started = False
-
+    
     parsed_url = urlparse.urlparse(current_video_url)
     if parsed_url.netloc == 'youtu.be':
         video_id = parsed_url.path[1:]
@@ -53,6 +55,7 @@ def update_config():
         start_date=start_date, 
         start_time=start_time, 
         video_url=current_video_url,
+        selected_duration=selected_duration,
         is_started=str(is_started).lower()
     )
 
