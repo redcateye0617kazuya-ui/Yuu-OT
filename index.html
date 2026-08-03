@@ -286,6 +286,39 @@
         .sc-name { font-weight: bold; font-size: 13px; color: #1A1A1A; }
         .sc-amount { color: #0066FF; font-weight: bold; font-size: 13px; }
 
+        /* Rule Setting 彈出視窗樣式 */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.4);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-card {
+            background: #FFFFFF;
+            padding: 30px;
+            border-radius: 24px;
+            width: 400px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            border: 1px solid #E4E6EB;
+        }
+        .modal-card h3 { margin-top: 0; color: #1A1A1A; font-size: 18px; }
+        .form-group { margin-bottom: 15px; display: flex; flex-direction: column; gap: 6px; }
+        .form-group label { font-size: 12px; font-weight: bold; color: #65676B; }
+        .form-group input, .form-group select {
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1px solid #E4E6EB;
+            background: #F4F6F9;
+            font-size: 13px;
+        }
+        .modal-buttons { display: flex; gap: 10px; margin-top: 20px; }
+        .modal-buttons button {
+            flex: 1; padding: 10px; border-radius: 10px; border: none; font-weight: bold; cursor: pointer; font-size: 13px;
+        }
+
         /* ==================== 響應式調整 (RWD 適合手機/平板) ==================== */
         @media (max-width: 1024px) {
             body {
@@ -319,15 +352,43 @@
         </div>
         <div class="nav-links">
             <button class="nav-item active">Dashboard</button>
-            <button class="nav-item">Reports</button>
+            <button class="nav-item" onclick="openRuleModal()" style="cursor: pointer;">⚙️ Rule Setting</button>
             <button class="nav-item">Calendar</button>
             <button class="nav-item">Chat</button>
-            <button class="nav-item">Settings</button>
         </div>
         <div class="nav-right-icons">
-            <button class="icon-btn">📞</button>
+            <button class="icon-btn" onclick="openRuleModal()" title="規則設定">⚙️</button>
             <button class="icon-btn">🔔</button>
             <button class="icon-btn primary">👤</button>
+        </div>
+    </div>
+
+    <!-- Rule Setting 彈出視窗 -->
+    <div class="modal-overlay" id="ruleModal">
+        <div class="modal-card">
+            <h3>⚙️ 規則自動加時設定</h3>
+            <div class="form-group">
+                <label>是否啟用自動加時規則</label>
+                <select id="ruleEnabled">
+                    <option value="yes" selected>啟用 (Enabled)</option>
+                    <option value="no">停用 (Disabled)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>觸發門檻金額 ($HKD)</label>
+                <input type="number" id="ruleThreshold" value="500" placeholder="例如: 500">
+            </div>
+            <div class="form-group">
+                <label>達到門檻後增加時間 (小時)</label>
+                <input type="number" step="0.5" id="ruleHours" value="1" placeholder="例如: 1">
+            </div>
+            <div style="font-size: 11px; color: #65676B; margin-top: 5px;">
+                💡 提示：當總 SC 金額達到或超過設定金額時，目標倒數時間會自動延長對應小時數。
+            </div>
+            <div class="modal-buttons">
+                <button type="button" onclick="closeRuleModal()" style="background: #F4F6F9; color: #1A1A1A; border: 1px solid #E4E6EB;">取消</button>
+                <button type="button" onclick="saveRuleModal()" style="background: #0066FF; color: #FFFFFF;">儲存設定</button>
+            </div>
         </div>
     </div>
 
@@ -403,8 +464,22 @@
         let targetEndTime = null;
         let streamStartTime = null;
         let timerInterval = null;
+        let hasAppliedRule = false; // 紀錄是否已經自動加過時，避免重複無限加
 
-        // 計算並自動更新已記錄的 SC 總金額
+        // 彈出視窗控制
+        function openRuleModal() {
+            document.getElementById("ruleModal").style.display = "flex";
+        }
+        function closeRuleModal() {
+            document.getElementById("ruleModal").style.display = "none";
+        }
+        function saveRuleModal() {
+            alert("✅ 規則設定已成功儲存！");
+            closeRuleModal();
+            checkAndApplyRule(); // 儲存後立即檢查一次
+        }
+
+        // 計算並自動更新已記錄的 SC 總金額，並套用動態規則
         function calculateTotalSC() {
             const amountElements = document.querySelectorAll('.sc-card');
             let total = 0;
@@ -413,7 +488,25 @@
                 total += amt;
             });
             document.getElementById("totalScBadge").innerText = `總計: $HKD ${total}`;
+            return total;
         }
+
+        function checkAndApplyRule() {
+            const enabled = document.getElementById("ruleEnabled").value === "yes";
+            if (!enabled || !targetEndTime) return;
+
+            const totalSC = calculateTotalSC();
+            const threshold = parseFloat(document.getElementById("ruleThreshold").value) || 500;
+            const hoursToAdd = parseFloat(document.getElementById("ruleHours").value) || 1;
+
+            // 如果總金額達到門檻，而且仲未自動加過時，就幫你延長目標時間！
+            if (totalSC >= threshold && !hasAppliedRule) {
+                targetEndTime += (hoursToAdd * 60 * 60 * 1000);
+                hasAppliedRule = true;
+                alert(`🎉 總 SC 金額已達到 $HKD ${totalSC}（超越門檻 $HKD ${threshold}），已自動為你加時 ${hoursToAdd} 小時！`);
+            }
+        }
+
         calculateTotalSC();
 
         function updateHKClockAndCalendar() {
@@ -475,12 +568,14 @@
 
             const hoursToAdd = parseFloat(document.getElementById("duration").value);
             const now = new Date().getTime();
-            streamStartTime = now; // 記錄開始累積時間的起點
+            streamStartTime = now; 
             targetEndTime = now + (hoursToAdd * 60 * 60 * 1000);
+            hasAppliedRule = false; // 重新開台重設加時狀態
 
             if (!timerInterval) {
                 timerInterval = setInterval(updateCountdown, 1000);
             }
+            checkAndApplyRule();
             updateCountdown();
         }
 
@@ -496,7 +591,10 @@
             const elSeconds = Math.floor((elapsedMs % (1000 * 60)) / 1000);
             document.getElementById("elapsedBox").innerText = `總直播累積：${String(elHours).padStart(2, '0')}:${String(elMinutes).padStart(2, '0')}:${String(elSeconds).padStart(2, '0')}`;
 
-            // 2. 更新倒數/OT狀態
+            // 2. 檢查規則條件
+            checkAndApplyRule();
+
+            // 3. 更新倒數/OT狀態
             const distance = targetEndTime - now;
             const countdownElem = document.getElementById("countdown");
 
@@ -517,6 +615,7 @@
         function resetTimer() {
             targetEndTime = null;
             streamStartTime = null;
+            hasAppliedRule = false;
             if (timerInterval) {
                 clearInterval(timerInterval);
                 timerInterval = null;
