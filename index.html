@@ -331,7 +331,7 @@
                 border-radius: 20px;
             }
             .dashboard-grid {
-                grid-template-columns: 1fr; /* 平板與手機變為單欄垂直排列 */
+                grid-template-columns: 1fr;
             }
             .control-bar {
                 flex-direction: column;
@@ -352,7 +352,7 @@
         </div>
         <div class="nav-links">
             <button class="nav-item active">Dashboard</button>
-            <button class="nav-item" onclick="openRuleModal()" style="cursor: pointer;">⚙️ Rule Setting</button>
+            <button class="nav-item" onclick="openRuleModal()">⚙️ Rule Setting</button>
             <button class="nav-item">Calendar</button>
             <button class="nav-item">Chat</button>
         </div>
@@ -426,9 +426,7 @@
                     <div style="font-size: 10px; color: #65676B;">Month</div>
                     <div class="month-name" id="current-month-year">July</div>
                 </div>
-                <div class="cal-days-right" id="calendar-days-container">
-                    <!-- 動態生成 7 日日期 -->
-                </div>
+                <div class="cal-days-right" id="calendar-days-container"></div>
             </div>
 
             <div class="widget-box">
@@ -464,7 +462,7 @@
         let targetEndTime = null;
         let streamStartTime = null;
         let timerInterval = null;
-        let hasAppliedRule = false; // 紀錄是否已經自動加過時，避免重複無限加
+        let hasAppliedRule = false;
 
         // 彈出視窗控制
         function openRuleModal() {
@@ -476,10 +474,10 @@
         function saveRuleModal() {
             alert("✅ 規則設定已成功儲存！");
             closeRuleModal();
-            checkAndApplyRule(); // 儲存後立即檢查一次
+            checkAndApplyRule();
         }
 
-        // 計算並自動更新已記錄的 SC 總金額，並套用動態規則
+        // 計算並自動更新已記錄的 SC 總金額
         function calculateTotalSC() {
             const amountElements = document.querySelectorAll('.sc-card');
             let total = 0;
@@ -499,7 +497,6 @@
             const threshold = parseFloat(document.getElementById("ruleThreshold").value) || 500;
             const hoursToAdd = parseFloat(document.getElementById("ruleHours").value) || 1;
 
-            // 如果總金額達到門檻，而且仲未自動加過時，就幫你延長目標時間！
             if (totalSC >= threshold && !hasAppliedRule) {
                 targetEndTime += (hoursToAdd * 60 * 60 * 1000);
                 hasAppliedRule = true;
@@ -570,7 +567,7 @@
             const now = new Date().getTime();
             streamStartTime = now; 
             targetEndTime = now + (hoursToAdd * 60 * 60 * 1000);
-            hasAppliedRule = false; // 重新開台重設加時狀態
+            hasAppliedRule = false;
 
             if (!timerInterval) {
                 timerInterval = setInterval(updateCountdown, 1000);
@@ -584,17 +581,14 @@
 
             const now = new Date().getTime();
             
-            // 1. 更新累積已開台時間
             const elapsedMs = now - streamStartTime;
             const elHours = Math.floor((elapsedMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
             const elMinutes = Math.floor((elapsedMs % (1000 * 60 * 60)) / (1000 * 60));
             const elSeconds = Math.floor((elapsedMs % (1000 * 60)) / 1000);
             document.getElementById("elapsedBox").innerText = `總直播累積：${String(elHours).padStart(2, '0')}:${String(elMinutes).padStart(2, '0')}:${String(elSeconds).padStart(2, '0')}`;
 
-            // 2. 檢查規則條件
             checkAndApplyRule();
 
-            // 3. 更新倒數/OT狀態
             const distance = targetEndTime - now;
             const countdownElem = document.getElementById("countdown");
 
