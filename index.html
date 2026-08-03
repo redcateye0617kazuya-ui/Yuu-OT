@@ -286,37 +286,77 @@
         .sc-name { font-weight: bold; font-size: 13px; color: #1A1A1A; }
         .sc-amount { color: #0066FF; font-weight: bold; font-size: 13px; }
 
-        /* Rule Setting 彈出視窗樣式 */
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.4);
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-        }
-        .modal-card {
+        /* Rule Setting 獨立區塊樣式 (改為內嵌頁面區塊) */
+        .rule-section-container {
+            grid-column: 1 / -1;
             background: #FFFFFF;
-            padding: 30px;
+            padding: 25px;
             border-radius: 24px;
-            width: 400px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            border: 1px solid #E4E6EB;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.03);
+            display: none; /* 預設隱藏，禁 Rule Setting 時顯示 */
+        }
+        .rule-section-container h3 { margin-top: 0; color: #1A1A1A; font-size: 18px; margin-bottom: 15px; }
+        .rule-form-row {
+            display: flex;
+            gap: 15px;
+            align-items: flex-end;
+            margin-bottom: 20px;
+            background: #F4F6F9;
+            padding: 15px;
+            border-radius: 16px;
             border: 1px solid #E4E6EB;
         }
-        .modal-card h3 { margin-top: 0; color: #1A1A1A; font-size: 18px; }
-        .form-group { margin-bottom: 15px; display: flex; flex-direction: column; gap: 6px; }
-        .form-group label { font-size: 12px; font-weight: bold; color: #65676B; }
-        .form-group input, .form-group select {
-            padding: 10px 12px;
+        .rule-form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            flex: 1;
+        }
+        .rule-form-group label { font-size: 11px; font-weight: bold; color: #65676B; }
+        .rule-form-group input, .rule-form-group select {
+            padding: 9px 12px;
             border-radius: 10px;
             border: 1px solid #E4E6EB;
-            background: #F4F6F9;
+            background: #FFFFFF;
             font-size: 13px;
         }
-        .modal-buttons { display: flex; gap: 10px; margin-top: 20px; }
-        .modal-buttons button {
-            flex: 1; padding: 10px; border-radius: 10px; border: none; font-weight: bold; cursor: pointer; font-size: 13px;
+        .rule-add-btn {
+            padding: 9px 20px;
+            background: #0066FF;
+            color: #FFFFFF;
+            border: none;
+            border-radius: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 13px;
+            height: 38px;
+        }
+        .rule-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .rule-item-card {
+            background: #F4F6F9;
+            padding: 12px 18px;
+            border-radius: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border: 1px solid #E4E6EB;
+            font-size: 13px;
+        }
+        .rule-item-info { font-weight: 500; color: #1A1A1A; }
+        .rule-delete-btn {
+            background: #FF3B30;
+            color: #FFFFFF;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: bold;
         }
 
         /* ==================== 響應式調整 (RWD 適合手機/平板) ==================== */
@@ -340,6 +380,10 @@
             .control-bar input[type="text"], .control-bar select, .control-bar button {
                 width: 100%;
             }
+            .rule-form-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
         }
     </style>
 </head>
@@ -351,49 +395,20 @@
             <span style="color: #0066FF; font-size: 20px;">✦</span> 加班台 Dashboard
         </div>
         <div class="nav-links">
-            <button class="nav-item active">Dashboard</button>
-            <button class="nav-item" onclick="openRuleModal()">⚙️ Rule Setting</button>
+            <button class="nav-item active" id="navDashBtn" onclick="switchView('dash')">Dashboard</button>
+            <button class="nav-item" id="navRuleBtn" onclick="switchView('rule')">⚙️ Rule Setting</button>
             <button class="nav-item">Calendar</button>
             <button class="nav-item">Chat</button>
         </div>
         <div class="nav-right-icons">
-            <button class="icon-btn" onclick="openRuleModal()" title="規則設定">⚙️</button>
+            <button class="icon-btn" onclick="switchView('rule')" title="規則設定">⚙️</button>
             <button class="icon-btn">🔔</button>
             <button class="icon-btn primary">👤</button>
         </div>
     </div>
 
-    <!-- Rule Setting 彈出視窗 -->
-    <div class="modal-overlay" id="ruleModal">
-        <div class="modal-card">
-            <h3>⚙️ 規則自動加時設定</h3>
-            <div class="form-group">
-                <label>是否啟用自動加時規則</label>
-                <select id="ruleEnabled">
-                    <option value="yes" selected>啟用 (Enabled)</option>
-                    <option value="no">停用 (Disabled)</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>觸發門檻金額 ($HKD)</label>
-                <input type="number" id="ruleThreshold" value="500" placeholder="例如: 500">
-            </div>
-            <div class="form-group">
-                <label>達到門檻後增加時間 (小時)</label>
-                <input type="number" step="0.5" id="ruleHours" value="1" placeholder="例如: 1">
-            </div>
-            <div style="font-size: 11px; color: #65676B; margin-top: 5px;">
-                💡 提示：當總 SC 金額達到或超過設定金額時，目標倒數時間會自動延長對應小時數。
-            </div>
-            <div class="modal-buttons">
-                <button type="button" onclick="closeRuleModal()" style="background: #F4F6F9; color: #1A1A1A; border: 1px solid #E4E6EB;">取消</button>
-                <button type="button" onclick="saveRuleModal()" style="background: #0066FF; color: #FFFFFF;">儲存設定</button>
-            </div>
-        </div>
-    </div>
-
     <!-- 主控台版面 -->
-    <div class="dashboard-grid">
+    <div class="dashboard-grid" id="dashboardMainGrid">
         <!-- 頂部控制列 -->
         <div class="control-bar">
             <input type="text" id="video_url" placeholder="請輸入 YouTube 直播 Link..." required>
@@ -440,21 +455,48 @@
         <div class="right-section">
             <div class="right-section-header">
                 <h3>🏆 SC 排行榜</h3>
-                <div class="total-sc-badge" id="totalScBadge">總計: $HKD 970</div>
+                <div class="total-sc-badge" id="totalScBadge">總計: $HKD 220</div>
             </div>
-            <div class="sc-card" data-amount="500">
-                <span class="sc-name">1. Viewer_A</span>
-                <span class="sc-amount">$HKD 500</span>
+            <div class="sc-card" data-amount="20">
+                <span class="sc-name">1. A</span>
+                <span class="sc-amount">$HKD 20</span>
             </div>
-            <div class="sc-card" data-amount="320">
-                <span class="sc-name">2. Fan_B</span>
-                <span class="sc-amount">$HKD 320</span>
+            <div class="sc-card" data-amount="50">
+                <span class="sc-name">2. B</span>
+                <span class="sc-amount">$HKD 50</span>
             </div>
             <div class="sc-card" data-amount="150">
-                <span class="sc-name">3. Supporter_C</span>
+                <span class="sc-name">3. C</span>
                 <span class="sc-amount">$HKD 150</span>
             </div>
             <div style="text-align: center; font-size: 11px; color: #65676B; margin-top: auto;">等待實時 SC 接入...</div>
+        </div>
+    </div>
+
+    <!-- Rule Setting 獨立頁面區塊 (多條 Rule 列表與新增功能) -->
+    <div class="rule-section-container" id="ruleSectionView">
+        <h3>⚙️ 加時規則設定清單 (可新增多條)</h3>
+        
+        <!-- 新增 Rule 表單 -->
+        <div class="rule-form-row">
+            <div class="rule-form-group">
+                <label>每滿多少金額 ($HKD)</label>
+                <input type="number" id="newRuleThreshold" value="200" placeholder="例如: 200">
+            </div>
+            <div class="rule-form-group">
+                <label>增加時間 (小時)</label>
+                <input type="number" step="0.5" id="newRuleHours" value="1" placeholder="例如: 1">
+            </div>
+            <button type="button" class="rule-add-btn" onclick="addNewRule()">➕ 新增規則</button>
+        </div>
+
+        <!-- 現有 Rule 列表 -->
+        <div class="rule-list" id="ruleListContainer">
+            <!-- 動態生成 -->
+        </div>
+        
+        <div style="margin-top: 20px;">
+            <button type="button" onclick="switchView('dash')" style="padding: 10px 20px; background: #1A1A1A; color: #FFFFFF; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 13px;">⬅️ 返回 Dashboard</button>
         </div>
     </div>
 
@@ -462,19 +504,92 @@
         let targetEndTime = null;
         let streamStartTime = null;
         let timerInterval = null;
-        let hasAppliedRule = false;
+        
+        // 儲存多條加時規則的陣列 (預設跟從需求：每 $200 加 1 小時，可無限累積)
+        let rules = [
+            { id: 1, threshold: 200, hours: 1 }
+        ];
 
-        // 彈出視窗控制
-        function openRuleModal() {
-            document.getElementById("ruleModal").style.display = "flex";
+        // 記錄每個規則已經觸發左幾多次，用嚟計「多左 20 就落下一個累積到」
+        let ruleTriggerCounts = {};
+
+        // 切換檢視畫面 (Dashboard 模式 vs Rule Setting 模式)
+        function switchView(viewName) {
+            const dashGrid = document.getElementById("dashboardMainGrid");
+            const ruleView = document.getElementById("ruleSectionView");
+            const navDash = document.getElementById("navDashBtn");
+            const navRule = document.getElementById("navRuleBtn");
+
+            if (viewName === 'rule') {
+                dashGrid.style.display = "none";
+                ruleView.style.display = "block";
+                navRule.classList.add("active");
+                navDash.classList.remove("active");
+                renderRuleList();
+            } else {
+                dashGrid.style.display = "grid";
+                ruleView.style.display = "none";
+                navDash.classList.add("active");
+                navRule.classList.remove("active");
+            }
         }
-        function closeRuleModal() {
-            document.getElementById("ruleModal").style.display = "none";
+
+        // 渲染 Rule 清單
+        function renderRuleList() {
+            const container = document.getElementById("ruleListContainer");
+            container.innerHTML = "";
+
+            if (rules.length === 0) {
+                container.innerHTML = `<div style="text-align: center; color: #65676B; padding: 20px;">暫時未有任何加時規則，請於上方新增。</div>`;
+                return;
+            }
+
+            rules.forEach((rule, index) => {
+                let item = document.createElement("div");
+                item.className = "rule-item-card";
+                item.innerHTML = `
+                    <div class="rule-item-info">
+                        <strong>規則 #${index + 1}：</strong> 每滿 <strong>$HKD ${rule.threshold}</strong> 即可自動加時 <strong>${rule.hours}</strong> 小時
+                    </div>
+                    <button class="rule-delete-btn" onclick="deleteRule(${rule.id})">刪除</button>
+                `;
+                container.appendChild(item);
+            });
         }
-        function saveRuleModal() {
-            alert("✅ 規則設定已成功儲存！");
-            closeRuleModal();
-            checkAndApplyRule();
+
+        // 新增一條 Rule
+        function addNewRule() {
+            const threshold = parseFloat(document.getElementById("newRuleThreshold").value);
+            const hours = parseFloat(document.getElementById("newRuleHours").value);
+
+            if (!threshold || threshold <= 0 || isNaN(threshold)) {
+                alert("❌ 請輸入有效的觸發金額！");
+                return;
+            }
+            if (!hours || hours <= 0 || isNaN(hours)) {
+                alert("❌ 請輸入有效的小時數！");
+                return;
+            }
+
+            const newRule = {
+                id: Date.now(),
+                threshold: threshold,
+                hours: hours
+            };
+
+            rules.push(newRule);
+            renderRuleList();
+            alert("✅ 成功新增加時規則！");
+            
+            // 重新檢查一次現有金額睇吓點
+            checkAndApplyRules();
+        }
+
+        // 刪除 Rule
+        function deleteRule(id) {
+            rules = rules.filter(r => r.id !== id);
+            renderRuleList();
+            checkAndApplyRules();
         }
 
         // 計算並自動更新已記錄的 SC 總金額
@@ -489,19 +604,36 @@
             return total;
         }
 
-        function checkAndApplyRule() {
-            const enabled = document.getElementById("ruleEnabled").value === "yes";
-            if (!enabled || !targetEndTime) return;
+        // 核心加時邏輯：支援多條規則，達到門檻倍數時自動累積加時（例如 $220 觸發 1 次，$420 觸發 2 次，多出嘅 $20 留低繼續滾存）
+        function checkAndApplyRules() {
+            if (!targetEndTime) return;
 
             const totalSC = calculateTotalSC();
-            const threshold = parseFloat(document.getElementById("ruleThreshold").value) || 500;
-            const hoursToAdd = parseFloat(document.getElementById("ruleHours").value) || 1;
 
-            if (totalSC >= threshold && !hasAppliedRule) {
-                targetEndTime += (hoursToAdd * 60 * 60 * 1000);
-                hasAppliedRule = true;
-                alert(`🎉 總 SC 金額已達到 $HKD ${totalSC}（超越門檻 $HKD ${threshold}），已自動為你加時 ${hoursToAdd} 小時！`);
-            }
+            rules.forEach(rule => {
+                if (rule.threshold <= 0) return;
+
+                // 計算呢條規則總共應該觸發幾多次 (例如總 $22, 每 $200 滿一次 => 1 次)
+                let eligibleTimes = Math.floor(totalSC / rule.threshold);
+                
+                // 記錄呢條規則之前已經觸發咗幾多次
+                if (ruleTriggerCounts[rule.id] === undefined) {
+                    ruleTriggerCounts[rule.id] = 0;
+                }
+
+                let previousTimes = ruleTriggerCounts[rule.id];
+
+                // 如果合資格次數大過之前已經加過嘅次數，代表有新達標嘅額度！
+                if (eligibleTimes > previousTimes) {
+                    let diffTimes = eligibleTimes - previousTimes;
+                    let addedHours = diffTimes * rule.hours;
+
+                    targetEndTime += (addedHours * 60 * 60 * 1000);
+                    ruleTriggerCounts[rule.id] = eligibleTimes;
+
+                    alert(`🎉 總 SC 金額達到 $HKD ${totalSC}！符合規則（每 $${rule.threshold} 加 ${rule.hours} 小時），已自動為你累積加時 ${addedHours} 小時（多出金額已保留落下一輪累積）！`);
+                }
+            });
         }
 
         calculateTotalSC();
@@ -567,12 +699,14 @@
             const now = new Date().getTime();
             streamStartTime = now; 
             targetEndTime = now + (hoursToAdd * 60 * 60 * 1000);
-            hasAppliedRule = false;
+            
+            // 重設加時次數紀錄
+            ruleTriggerCounts = {};
 
             if (!timerInterval) {
                 timerInterval = setInterval(updateCountdown, 1000);
             }
-            checkAndApplyRule();
+            checkAndApplyRules();
             updateCountdown();
         }
 
@@ -587,7 +721,7 @@
             const elSeconds = Math.floor((elapsedMs % (1000 * 60)) / 1000);
             document.getElementById("elapsedBox").innerText = `總直播累積：${String(elHours).padStart(2, '0')}:${String(elMinutes).padStart(2, '0')}:${String(elSeconds).padStart(2, '0')}`;
 
-            checkAndApplyRule();
+            checkAndApplyRules();
 
             const distance = targetEndTime - now;
             const countdownElem = document.getElementById("countdown");
@@ -609,7 +743,7 @@
         function resetTimer() {
             targetEndTime = null;
             streamStartTime = null;
-            hasAppliedRule = false;
+            ruleTriggerCounts = {};
             if (timerInterval) {
                 clearInterval(timerInterval);
                 timerInterval = null;
