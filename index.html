@@ -17,7 +17,7 @@
             min-height: 100vh;
         }
 
-        /* 頂部導航欄（參考圖風格） */
+        /* 頂部導航列 */
         .navbar {
             width: 100%;
             max-width: 1200px;
@@ -83,7 +83,7 @@
             color: #FFFFFF;
         }
 
-        /* 主控台網格佈局（無大灰底托底） */
+        /* 主控台網格佈局 */
         .dashboard-grid {
             width: 100%;
             max-width: 1200px;
@@ -92,7 +92,7 @@
             gap: 25px;
         }
 
-        /* 頂部入 Link 控制列 */
+        /* 頂部控制列 */
         .control-bar {
             grid-column: 1 / -1;
             background: #FFFFFF;
@@ -148,10 +148,10 @@
             justify-content: center;
             background: #FFFFFF;
             box-shadow: inset 0 5px 15px rgba(0,0,0,0.05);
-            margin-bottom: 20px;
+            margin-bottom: 15px;
         }
         .timer-circle span {
-            font-size: 28px;
+            font-size: 26px;
             color: #1A1A1A;
             font-weight: bold;
             letter-spacing: 1px;
@@ -159,7 +159,13 @@
         .status-text {
             font-size: 13px;
             color: #65676B;
-            margin-top: 10px;
+            margin-top: 5px;
+        }
+        .elapsed-text {
+            font-size: 12px;
+            color: #0066FF;
+            font-weight: bold;
+            margin-top: 8px;
         }
 
         /* 中間：日曆與時間區 */
@@ -246,11 +252,24 @@
             flex-direction: column;
             gap: 12px;
         }
+        .right-section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+        }
         .right-section h3 {
-            margin: 0 0 8px 0;
+            margin: 0;
             color: #1A1A1A;
-            font-size: 16px;
-            text-align: center;
+            font-size: 15px;
+        }
+        .total-sc-badge {
+            background: #E8F0FE;
+            color: #0066FF;
+            font-size: 11px;
+            font-weight: bold;
+            padding: 4px 8px;
+            border-radius: 8px;
         }
         .sc-card {
             background: #F4F6F9;
@@ -266,11 +285,34 @@
         }
         .sc-name { font-weight: bold; font-size: 13px; color: #1A1A1A; }
         .sc-amount { color: #0066FF; font-weight: bold; font-size: 13px; }
+
+        /* ==================== 響應式調整 (RWD 適合手機/平板) ==================== */
+        @media (max-width: 1024px) {
+            body {
+                padding: 10px 15px;
+            }
+            .navbar {
+                flex-direction: column;
+                gap: 12px;
+                padding: 15px;
+                border-radius: 20px;
+            }
+            .dashboard-grid {
+                grid-template-columns: 1fr; /* 平板與手機變為單欄垂直排列 */
+            }
+            .control-bar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .control-bar input[type="text"], .control-bar select, .control-bar button {
+                width: 100%;
+            }
+        }
     </style>
 </head>
 <body>
 
-    <!-- 頂部導航列 (完美還原參考圖佈局) -->
+    <!-- 頂部導航列 -->
     <div class="navbar">
         <div class="nav-logo">
             <span style="color: #0066FF; font-size: 20px;">✦</span> 加班台 Dashboard
@@ -289,9 +331,9 @@
         </div>
     </div>
 
-    <!-- 主控台版面 (無大灰底托底) -->
+    <!-- 主控台版面 -->
     <div class="dashboard-grid">
-        <!-- 頂部控制列：入 Link 區 -->
+        <!-- 頂部控制列 -->
         <div class="control-bar">
             <input type="text" id="video_url" placeholder="請輸入 YouTube 直播 Link..." required>
             <select id="duration">
@@ -306,16 +348,17 @@
             <button type="button" onclick="resetTimer()" style="background: #F4F6F9; color: #1A1A1A; border: 1px solid #E4E6EB;">🔄 重設</button>
         </div>
 
-        <!-- 左側：倒數時鐘 -->
+        <!-- 左側：倒數時鐘 + 累積時間 -->
         <div class="left-section">
             <div class="timer-circle">
                 <span id="countdown">04:30:00</span>
-                <span style="font-size: 11px; color: #65676B; margin-top: 5px;">倒數狀態</span>
+                <span style="font-size: 11px; color: #65676B; margin-top: 4px;">倒數狀態</span>
             </div>
+            <div class="elapsed-text" id="elapsedBox">總直播累積：00:00:00</div>
             <div class="status-text" id="statusBox">狀態：尚未綁定直播</div>
         </div>
 
-        <!-- 中間：左月份、右日期列 + 香港即時時間 -->
+        <!-- 中間：日曆與時間區 -->
         <div class="middle-section">
             <div class="calendar-widget-split">
                 <div class="cal-month-box">
@@ -334,18 +377,21 @@
             </div>
         </div>
 
-        <!-- 右側：Super Chat 排行榜 -->
+        <!-- 右側：Super Chat 排行榜 + 總金額 -->
         <div class="right-section">
-            <h3>🏆 Super Chat 排行榜</h3>
-            <div class="sc-card">
+            <div class="right-section-header">
+                <h3>🏆 SC 排行榜</h3>
+                <div class="total-sc-badge" id="totalScBadge">總計: $HKD 970</div>
+            </div>
+            <div class="sc-card" data-amount="500">
                 <span class="sc-name">1. Viewer_A</span>
                 <span class="sc-amount">$HKD 500</span>
             </div>
-            <div class="sc-card">
+            <div class="sc-card" data-amount="320">
                 <span class="sc-name">2. Fan_B</span>
                 <span class="sc-amount">$HKD 320</span>
             </div>
-            <div class="sc-card">
+            <div class="sc-card" data-amount="150">
                 <span class="sc-name">3. Supporter_C</span>
                 <span class="sc-amount">$HKD 150</span>
             </div>
@@ -355,22 +401,32 @@
 
     <script>
         let targetEndTime = null;
+        let streamStartTime = null;
         let timerInterval = null;
+
+        // 計算並自動更新已記錄的 SC 總金額
+        function calculateTotalSC() {
+            const amountElements = document.querySelectorAll('.sc-card');
+            let total = 0;
+            amountElements.forEach(card => {
+                const amt = parseFloat(card.getAttribute('data-amount')) || 0;
+                total += amt;
+            });
+            document.getElementById("totalScBadge").innerText = `總計: $HKD ${total}`;
+        }
+        calculateTotalSC();
 
         function updateHKClockAndCalendar() {
             const now = new Date();
             const hkTimeStr = now.toLocaleString("en-US", { timeZone: "Asia/Hong_Kong" });
             const hkDate = new Date(hkTimeStr);
 
-            // 更新香港即時時間
             document.getElementById("hk-realtime").innerText = hkDate.toTimeString().split(' ')[0];
             document.getElementById("hk-realdate").innerText = hkDate.toISOString().split('T')[0];
 
-            // 月份名稱
             const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
             document.getElementById("current-month-year").innerText = monthNames[hkDate.getMonth()];
 
-            // 渲染本週 7 日
             const container = document.getElementById("calendar-days-container");
             container.innerHTML = "";
 
@@ -419,6 +475,7 @@
 
             const hoursToAdd = parseFloat(document.getElementById("duration").value);
             const now = new Date().getTime();
+            streamStartTime = now; // 記錄開始累積時間的起點
             targetEndTime = now + (hoursToAdd * 60 * 60 * 1000);
 
             if (!timerInterval) {
@@ -431,6 +488,15 @@
             if (!targetEndTime) return;
 
             const now = new Date().getTime();
+            
+            // 1. 更新累積已開台時間
+            const elapsedMs = now - streamStartTime;
+            const elHours = Math.floor((elapsedMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const elMinutes = Math.floor((elapsedMs % (1000 * 60 * 60)) / (1000 * 60));
+            const elSeconds = Math.floor((elapsedMs % (1000 * 60)) / 1000);
+            document.getElementById("elapsedBox").innerText = `總直播累積：${String(elHours).padStart(2, '0')}:${String(elMinutes).padStart(2, '0')}:${String(elSeconds).padStart(2, '0')}`;
+
+            // 2. 更新倒數/OT狀態
             const distance = targetEndTime - now;
             const countdownElem = document.getElementById("countdown");
 
@@ -450,11 +516,13 @@
 
         function resetTimer() {
             targetEndTime = null;
+            streamStartTime = null;
             if (timerInterval) {
                 clearInterval(timerInterval);
                 timerInterval = null;
             }
             document.getElementById("countdown").innerHTML = "04:30:00";
+            document.getElementById("elapsedBox").innerText = "總直播累積：00:00:00";
             document.getElementById("statusBox").innerHTML = "狀態：已重設";
         }
     </script>
