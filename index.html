@@ -286,7 +286,7 @@
         .sc-name { font-weight: bold; font-size: 13px; color: #1A1A1A; }
         .sc-amount { color: #0066FF; font-weight: bold; font-size: 13px; }
 
-        /* Rule Setting 區塊 (分段式條件加時清單) */
+        /* Rule Setting 區塊 */
         .rule-section-container {
             grid-column: 1 / -1;
             background: #FFFFFF;
@@ -359,31 +359,57 @@
             font-weight: bold;
         }
 
-        /* ==================== 響應式調整 (RWD 適合手機/平板) ==================== */
+        /* Report 區塊樣式 (取代 Calendar) */
+        .report-section-container {
+            grid-column: 1 / -1;
+            background: #FFFFFF;
+            padding: 25px;
+            border-radius: 24px;
+            border: 1px solid #E4E6EB;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.03);
+            display: none;
+        }
+        .report-section-container h3 { margin-top: 0; color: #1A1A1A; font-size: 18px; margin-bottom: 15px; }
+        .stream-report-card {
+            background: #F4F6F9;
+            border: 1px solid #E4E6EB;
+            border-radius: 16px;
+            padding: 18px;
+            margin-bottom: 15px;
+        }
+        .stream-report-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            border-bottom: 1px solid #E4E6EB;
+            padding-bottom: 8px;
+            font-size: 13px;
+        }
+        .timeline-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .timeline-item {
+            background: #FFFFFF;
+            padding: 8px 14px;
+            border-radius: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border: 1px solid #E4E6EB;
+            font-size: 12px;
+        }
+
+        /* ==================== 響應式調整 ==================== */
         @media (max-width: 1024px) {
-            body {
-                padding: 10px 15px;
-            }
-            .navbar {
-                flex-direction: column;
-                gap: 12px;
-                padding: 15px;
-                border-radius: 20px;
-            }
-            .dashboard-grid {
-                grid-template-columns: 1fr;
-            }
-            .control-bar {
-                flex-direction: column;
-                align-items: stretch;
-            }
-            .control-bar input[type="text"], .control-bar select, .control-bar button {
-                width: 100%;
-            }
-            .rule-form-row {
-                flex-direction: column;
-                align-items: stretch;
-            }
+            body { padding: 10px 15px; }
+            .navbar { flex-direction: column; gap: 12px; padding: 15px; border-radius: 20px; }
+            .dashboard-grid { grid-template-columns: 1fr; }
+            .control-bar { flex-direction: column; align-items: stretch; }
+            .control-bar input[type="text"], .control-bar select, .control-bar button { width: 100%; }
+            .rule-form-row { flex-direction: column; align-items: stretch; }
         }
     </style>
 </head>
@@ -397,12 +423,12 @@
         <div class="nav-links">
             <button class="nav-item active" id="navDashBtn" onclick="switchView('dash')">Dashboard</button>
             <button class="nav-item" id="navRuleBtn" onclick="switchView('rule')">⚙️ Rule Setting</button>
-            <button class="nav-item">Calendar</button>
+            <button class="nav-item" id="navReportBtn" onclick="switchView('report')">📈 Report</button>
             <button class="nav-item">Chat</button>
         </div>
         <div class="nav-right-icons">
             <button class="icon-btn" onclick="switchView('rule')" title="規則設定">⚙️</button>
-            <button class="icon-btn">🔔</button>
+            <button class="icon-btn" onclick="switchView('report')" title="直播歷史報告">📈</button>
             <button class="icon-btn primary">👤</button>
         </div>
     </div>
@@ -473,11 +499,9 @@
         </div>
     </div>
 
-    <!-- Rule Setting 區塊 (支援分段條件式加時規則) -->
+    <!-- Rule Setting 區塊 -->
     <div class="rule-section-container" id="ruleSectionView">
         <h3>⚙️ 分段條件加時規則設定 (支援階梯式條件)</h3>
-        
-        <!-- 新增 Rule 表單 -->
         <div class="rule-form-row">
             <div class="rule-form-group">
                 <label>起始金額條件 (由幾多蚊開始)</label>
@@ -493,12 +517,22 @@
             </div>
             <button type="button" class="rule-add-btn" onclick="addNewRule()">➕ 新增區段</button>
         </div>
-
-        <!-- 現有 Rule 列表 -->
-        <div class="rule-list" id="ruleListContainer">
-            <!-- 動態生成 -->
+        <div class="rule-list" id="ruleListContainer"></div>
+        <div style="margin-top: 20px;">
+            <button type="button" onclick="switchView('dash')" style="padding: 10px 20px; background: #1A1A1A; color: #FFFFFF; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 13px;">⬅️ 返回 Dashboard</button>
         </div>
+    </div>
+
+    <!-- Report 區塊 (取代原先 Calendar 頁面，用作記錄每一場直播及對應 SC 時間軸) -->
+    <div class="report-section-container" id="reportSectionView">
+        <h3>📈 直播歷史與 Super Chat 時間軸報告</h3>
+        <div style="font-size: 12px; color: #65676B; margin-bottom: 15px;">記錄每一場你輸入並開始過的直播，並按時間軸展示觀眾的課金時間、名稱與金額。</div>
         
+        <!-- 歷史報告列表容器 -->
+        <div id="reportListContainer">
+            <!-- 動態生成每一場直播報告 -->
+        </div>
+
         <div style="margin-top: 20px;">
             <button type="button" onclick="switchView('dash')" style="padding: 10px 20px; background: #1A1A1A; color: #FFFFFF; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 13px;">⬅️ 返回 Dashboard</button>
         </div>
@@ -508,34 +542,85 @@
         let targetEndTime = null;
         let streamStartTime = null;
         let timerInterval = null;
+        let currentStreamId = null; // 記錄當前直播唯一代號
+
+        // 儲存所有已記錄的直播歷史資料
+        let streamHistory = [];
         
-        // 預設階梯條件規則：
-        // 1. 金額由 $0 開始，每滿 $200 加 1 小時
-        // 2. 當達到 $5000 開始，轉為每滿 $500 加 1 小時
         let rules = [
             { id: 1, startAmount: 0, stepAmount: 200, hours: 1 },
             { id: 2, startAmount: 5000, stepAmount: 500, hours: 1 }
         ];
 
-        // 切換畫面
+        // 切換畫面 (新增 report 模式)
         function switchView(viewName) {
             const dashGrid = document.getElementById("dashboardMainGrid");
             const ruleView = document.getElementById("ruleSectionView");
+            const reportView = document.getElementById("reportSectionView");
             const navDash = document.getElementById("navDashBtn");
             const navRule = document.getElementById("navRuleBtn");
+            const navReport = document.getElementById("navReportBtn");
+
+            dashGrid.style.display = "none";
+            ruleView.style.display = "none";
+            reportView.style.display = "none";
+            navDash.classList.remove("active");
+            navRule.classList.remove("active");
+            navReport.classList.remove("active");
 
             if (viewName === 'rule') {
-                dashGrid.style.display = "none";
                 ruleView.style.display = "block";
                 navRule.classList.add("active");
-                navDash.classList.remove("active");
                 renderRuleList();
+            } else if (viewName === 'report') {
+                reportView.style.display = "block";
+                navReport.classList.add("active");
+                renderReportList();
             } else {
                 dashGrid.style.display = "grid";
-                ruleView.style.display = "none";
                 navDash.classList.add("active");
-                navRule.classList.remove("active");
             }
+        }
+
+        // 渲染 Report 報告清單
+        function renderReportList() {
+            const container = document.getElementById("reportListContainer");
+            container.innerHTML = "";
+
+            if (streamHistory.length === 0) {
+                container.innerHTML = `<div style="text-align: center; color: #65676B; padding: 30px; background: #F4F6F9; border-radius: 16px;">暫時未有任何直播歷史記錄，請先於 Dashboard 輸入直播 Link 並按 Start 開始。</div>`;
+                return;
+            }
+
+            streamHistory.forEach((stream, index) => {
+                let card = document.createElement("div");
+                card.className = "stream-report-card";
+                
+                let timelineHtml = "";
+                if (stream.scEvents && stream.scEvents.length > 0) {
+                    stream.scEvents.forEach(sc => {
+                        timelineHtml += `
+                            <div class="timeline-item">
+                                <div><span style="color: #65676B; font-weight: bold; margin-right: 10px;">[${sc.time}]</span> <strong>${sc.name}</strong></div>
+                                <div style="color: #0066FF; font-weight: bold;">$HKD ${sc.amount}</div>
+                            </div>
+                        `;
+                    });
+                } else {
+                    timelineHtml = `<div style="font-size: 12px; color: #65676B; text-align: center; padding: 5px;">此場直播暫無紀錄到 SC 課金數據</div>`;
+                }
+
+                card.innerHTML = `
+                    <div class="stream-report-header">
+                        <div><strong>直播 #${streamHistory.length - index}</strong> ｜ 連結代號：<span style="color: #0066FF;">${stream.videoId}</span></div>
+                        <div>開始時間：${stream.startTimeStr} ｜ 總額：<strong>$HKD ${stream.totalAmount}</strong></div>
+                    </div>
+                    <div class="timeline-list">
+                        ${timelineHtml}
+                    </div>
+                `;
+                container.appendChild(card);
+            });
         }
 
         // 渲染 Rule 清單
@@ -548,7 +633,6 @@
                 return;
             }
 
-            // 按起始金額排序，確保顯示有條理
             rules.sort((a, b) => a.startAmount - b.startAmount);
 
             rules.forEach((rule, index) => {
@@ -564,7 +648,6 @@
             });
         }
 
-        // 新增 Rule 區段
         function addNewRule() {
             const startAmount = parseFloat(document.getElementById("newRuleStart").value);
             const stepAmount = parseFloat(document.getElementById("newRuleStep").value);
@@ -596,14 +679,12 @@
             checkAndApplyRules();
         }
 
-        // 刪除 Rule
         function deleteRule(id) {
             rules = rules.filter(r => r.id !== id);
             renderRuleList();
             checkAndApplyRules();
         }
 
-        // 計算 SC 總金額
         function calculateTotalSC() {
             const amountElements = document.querySelectorAll('.sc-card');
             let total = 0;
@@ -612,16 +693,22 @@
                 total += amt;
             });
             document.getElementById("totalScBadge").innerText = `總計: $HKD ${total}`;
+            
+            // 同步更新當前直播歷史的總金額記錄
+            if (currentStreamId) {
+                let currentStream = streamHistory.find(s => s.id === currentStreamId);
+                if (currentStream) {
+                    currentStream.totalAmount = total;
+                }
+            }
             return total;
         }
 
-        // 階梯條件式加時核心運算邏輯
         function checkAndApplyRules() {
             if (!targetEndTime) return;
 
             const totalSC = calculateTotalSC();
             
-            // 按起始金額排序處理區段
             rules.sort((a, b) => a.startAmount - b.startAmount);
 
             let totalExpectedHours = 0;
@@ -632,7 +719,6 @@
                 let currentRule = rules[i];
                 let nextStart = (i < rules.length - 1) ? rules[i + 1].startAmount : Infinity;
 
-                // 檢查目前總金額有幾多落喺呢個區段之內
                 if (totalSC > currentRule.startAmount) {
                     let effectiveStart = Math.max(currentRule.startAmount, previousThreshold);
                     let effectiveEnd = Math.min(totalSC, nextStart);
@@ -646,7 +732,6 @@
                 previousThreshold = nextStart;
             }
 
-            // 紀錄總共已經自動加咗幾多鐘（利用閉包或全域變數記錄上次已加總時數）
             if (window.appliedTotalHours === undefined) {
                 window.appliedTotalHours = 0;
             }
@@ -672,28 +757,26 @@
             const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
             document.getElementById("current-month-year").innerText = monthNames[hkDate.getMonth()];
 
+            // 保持原本日曆 UI 結構（但頁面導航列中已改為 Report 頁面）
             const container = document.getElementById("calendar-days-container");
-            container.innerHTML = "";
-
-            let currentDayOfWeek = hkDate.getDay();
-            let sunday = new Date(hkDate);
-            sunday.setDate(hkDate.getDate() - currentDayOfWeek);
-
-            const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-            
-            for (let i = 0; i < 7; i++) {
-                let d = new Date(sunday);
-                d.setDate(sunday.getDate() + i);
-
-                let isToday = d.toDateString() === hkDate.toDateString();
-                
-                let dayDiv = document.createElement("div");
-                dayDiv.className = `cal-day-item ${isToday ? 'active' : ''}`;
-                dayDiv.innerHTML = `
-                    <div style="font-size: 9px;">${dayNames[i]}</div>
-                    <div class="day-num">${String(d.getDate()).padStart(2, '0')}</div>
-                `;
-                container.appendChild(dayDiv);
+            if (container) {
+                container.innerHTML = "";
+                let currentDayOfWeek = hkDate.getDay();
+                let sunday = new Date(hkDate);
+                sunday.setDate(hkDate.getDate() - currentDayOfWeek);
+                const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+                for (let i = 0; i < 7; i++) {
+                    let d = new Date(sunday);
+                    d.setDate(sunday.getDate() + i);
+                    let isToday = d.toDateString() === hkDate.toDateString();
+                    let dayDiv = document.createElement("div");
+                    dayDiv.className = `cal-day-item ${isToday ? 'active' : ''}`;
+                    dayDiv.innerHTML = `
+                        <div style="font-size: 9px;">${dayNames[i]}</div>
+                        <div class="day-num">${String(d.getDate()).padStart(2, '0')}</div>
+                    `;
+                    container.appendChild(dayDiv);
+                }
             }
         }
 
@@ -724,6 +807,28 @@
             targetEndTime = now + (hoursToAdd * 60 * 60 * 1000);
             
             window.appliedTotalHours = 0;
+            currentStreamId = Date.now();
+
+            // 記錄進 Report 歷史清單中 (依時間軸模擬提取當前 SC 卡片資訊)
+            let scEvents = [];
+            const amountElements = document.querySelectorAll('.sc-card');
+            amountElements.forEach((card, idx) => {
+                const name = card.querySelector('.sc-name').innerText;
+                const amt = card.getAttribute('data-amount');
+                // 模擬時間軸時差分佈
+                let eventTime = new Date(now + (idx * 60000)).toLocaleTimeString("en-US", { timeZone: "Asia/Hong_Kong", hour12: false });
+                scEvents.push({ time: eventTime, name: name, amount: amt });
+            });
+
+            let newStreamRecord = {
+                id: currentStreamId,
+                videoId: videoId,
+                startTimeStr: new Date(now).toLocaleString("en-US", { timeZone: "Asia/Hong_Kong" }),
+                totalAmount: calculateTotalSC(),
+                scEvents: scEvents
+            };
+
+            streamHistory.unshift(newStreamRecord); // 最新嘅擺喺最前面
 
             if (!timerInterval) {
                 timerInterval = setInterval(updateCountdown, 1000);
@@ -765,6 +870,7 @@
         function resetTimer() {
             targetEndTime = null;
             streamStartTime = null;
+            currentStreamId = null;
             window.appliedTotalHours = 0;
             if (timerInterval) {
                 clearInterval(timerInterval);
