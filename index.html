@@ -286,7 +286,7 @@
         .sc-name { font-weight: bold; font-size: 13px; color: #1A1A1A; }
         .sc-amount { color: #0066FF; font-weight: bold; font-size: 13px; }
 
-        /* Rule Setting 獨立區塊樣式 (改為內嵌頁面區塊) */
+        /* Rule Setting 區塊 (分段式條件加時清單) */
         .rule-section-container {
             grid-column: 1 / -1;
             background: #FFFFFF;
@@ -294,12 +294,12 @@
             border-radius: 24px;
             border: 1px solid #E4E6EB;
             box-shadow: 0 4px 20px rgba(0,0,0,0.03);
-            display: none; /* 預設隱藏，禁 Rule Setting 時顯示 */
+            display: none;
         }
         .rule-section-container h3 { margin-top: 0; color: #1A1A1A; font-size: 18px; margin-bottom: 15px; }
         .rule-form-row {
             display: flex;
-            gap: 15px;
+            gap: 12px;
             align-items: flex-end;
             margin-bottom: 20px;
             background: #F4F6F9;
@@ -473,21 +473,25 @@
         </div>
     </div>
 
-    <!-- Rule Setting 獨立頁面區塊 (多條 Rule 列表與新增功能) -->
+    <!-- Rule Setting 區塊 (支援分段條件式加時規則) -->
     <div class="rule-section-container" id="ruleSectionView">
-        <h3>⚙️ 加時規則設定清單 (可新增多條)</h3>
+        <h3>⚙️ 分段條件加時規則設定 (支援階梯式條件)</h3>
         
         <!-- 新增 Rule 表單 -->
         <div class="rule-form-row">
             <div class="rule-form-group">
+                <label>起始金額條件 (由幾多蚊開始)</label>
+                <input type="number" id="newRuleStart" value="0" placeholder="例如: 0 或 5000">
+            </div>
+            <div class="rule-form-group">
                 <label>每滿多少金額 ($HKD)</label>
-                <input type="number" id="newRuleThreshold" value="200" placeholder="例如: 200">
+                <input type="number" id="newRuleStep" value="200" placeholder="例如: 200 或 500">
             </div>
             <div class="rule-form-group">
                 <label>增加時間 (小時)</label>
                 <input type="number" step="0.5" id="newRuleHours" value="1" placeholder="例如: 1">
             </div>
-            <button type="button" class="rule-add-btn" onclick="addNewRule()">➕ 新增規則</button>
+            <button type="button" class="rule-add-btn" onclick="addNewRule()">➕ 新增區段</button>
         </div>
 
         <!-- 現有 Rule 列表 -->
@@ -505,15 +509,15 @@
         let streamStartTime = null;
         let timerInterval = null;
         
-        // 儲存多條加時規則的陣列 (預設跟從需求：每 $200 加 1 小時，可無限累積)
+        // 預設階梯條件規則：
+        // 1. 金額由 $0 開始，每滿 $200 加 1 小時
+        // 2. 當達到 $5000 開始，轉為每滿 $500 加 1 小時
         let rules = [
-            { id: 1, threshold: 200, hours: 1 }
+            { id: 1, startAmount: 0, stepAmount: 200, hours: 1 },
+            { id: 2, startAmount: 5000, stepAmount: 500, hours: 1 }
         ];
 
-        // 記錄每個規則已經觸發左幾多次，用嚟計「多左 20 就落下一個累積到」
-        let ruleTriggerCounts = {};
-
-        // 切換檢視畫面 (Dashboard 模式 vs Rule Setting 模式)
+        // 切換畫面
         function switchView(viewName) {
             const dashGrid = document.getElementById("dashboardMainGrid");
             const ruleView = document.getElementById("ruleSectionView");
@@ -544,12 +548,15 @@
                 return;
             }
 
+            // 按起始金額排序，確保顯示有條理
+            rules.sort((a, b) => a.startAmount - b.startAmount);
+
             rules.forEach((rule, index) => {
                 let item = document.createElement("div");
                 item.className = "rule-item-card";
                 item.innerHTML = `
                     <div class="rule-item-info">
-                        <strong>規則 #${index + 1}：</strong> 每滿 <strong>$HKD ${rule.threshold}</strong> 即可自動加時 <strong>${rule.hours}</strong> 小時
+                        <strong>階段 #${index + 1}：</strong> 當累積滿 <strong>$HKD ${rule.startAmount}</strong> 後，每滿 <strong>$HKD ${rule.stepAmount}</strong> 自動加時 <strong>${rule.hours}</strong> 小時
                     </div>
                     <button class="rule-delete-btn" onclick="deleteRule(${rule.id})">刪除</button>
                 `;
@@ -557,13 +564,18 @@
             });
         }
 
-        // 新增一條 Rule
+        // 新增 Rule 區段
         function addNewRule() {
-            const threshold = parseFloat(document.getElementById("newRuleThreshold").value);
+            const startAmount = parseFloat(document.getElementById("newRuleStart").value);
+            const stepAmount = parseFloat(document.getElementById("newRuleStep").value);
             const hours = parseFloat(document.getElementById("newRuleHours").value);
 
-            if (!threshold || threshold <= 0 || isNaN(threshold)) {
-                alert("❌ 請輸入有效的觸發金額！");
+            if (isNaN(startAmount) || startAmount < 0) {
+                alert("❌ 請輸入有效的起始金額！");
+                return;
+            }
+            if (!stepAmount || stepAmount <= 0 || isNaN(stepAmount)) {
+                alert("❌ 請輸入有效的每滿金額！");
                 return;
             }
             if (!hours || hours <= 0 || isNaN(hours)) {
@@ -573,15 +585,14 @@
 
             const newRule = {
                 id: Date.now(),
-                threshold: threshold,
+                startAmount: startAmount,
+                stepAmount: stepAmount,
                 hours: hours
             };
 
             rules.push(newRule);
             renderRuleList();
-            alert("✅ 成功新增加時規則！");
-            
-            // 重新檢查一次現有金額睇吓點
+            alert("✅ 成功新增條件加時區段！");
             checkAndApplyRules();
         }
 
@@ -592,7 +603,7 @@
             checkAndApplyRules();
         }
 
-        // 計算並自動更新已記錄的 SC 總金額
+        // 計算 SC 總金額
         function calculateTotalSC() {
             const amountElements = document.querySelectorAll('.sc-card');
             let total = 0;
@@ -604,36 +615,48 @@
             return total;
         }
 
-        // 核心加時邏輯：支援多條規則，達到門檻倍數時自動累積加時（例如 $220 觸發 1 次，$420 觸發 2 次，多出嘅 $20 留低繼續滾存）
+        // 階梯條件式加時核心運算邏輯
         function checkAndApplyRules() {
             if (!targetEndTime) return;
 
             const totalSC = calculateTotalSC();
+            
+            // 按起始金額排序處理區段
+            rules.sort((a, b) => a.startAmount - b.startAmount);
 
-            rules.forEach(rule => {
-                if (rule.threshold <= 0) return;
+            let totalExpectedHours = 0;
+            let remainingSC = totalSC;
+            let previousThreshold = 0;
 
-                // 計算呢條規則總共應該觸發幾多次 (例如總 $22, 每 $200 滿一次 => 1 次)
-                let eligibleTimes = Math.floor(totalSC / rule.threshold);
-                
-                // 記錄呢條規則之前已經觸發咗幾多次
-                if (ruleTriggerCounts[rule.id] === undefined) {
-                    ruleTriggerCounts[rule.id] = 0;
+            for (let i = 0; i < rules.length; i++) {
+                let currentRule = rules[i];
+                let nextStart = (i < rules.length - 1) ? rules[i + 1].startAmount : Infinity;
+
+                // 檢查目前總金額有幾多落喺呢個區段之內
+                if (totalSC > currentRule.startAmount) {
+                    let effectiveStart = Math.max(currentRule.startAmount, previousThreshold);
+                    let effectiveEnd = Math.min(totalSC, nextStart);
+
+                    if (effectiveEnd > effectiveStart) {
+                        let amountInThisTier = effectiveEnd - effectiveStart;
+                        let times = Math.floor(amountInThisTier / currentRule.stepAmount);
+                        totalExpectedHours += (times * currentRule.hours);
+                    }
                 }
+                previousThreshold = nextStart;
+            }
 
-                let previousTimes = ruleTriggerCounts[rule.id];
+            // 紀錄總共已經自動加咗幾多鐘（利用閉包或全域變數記錄上次已加總時數）
+            if (window.appliedTotalHours === undefined) {
+                window.appliedTotalHours = 0;
+            }
 
-                // 如果合資格次數大過之前已經加過嘅次數，代表有新達標嘅額度！
-                if (eligibleTimes > previousTimes) {
-                    let diffTimes = eligibleTimes - previousTimes;
-                    let addedHours = diffTimes * rule.hours;
-
-                    targetEndTime += (addedHours * 60 * 60 * 1000);
-                    ruleTriggerCounts[rule.id] = eligibleTimes;
-
-                    alert(`🎉 總 SC 金額達到 $HKD ${totalSC}！符合規則（每 $${rule.threshold} 加 ${rule.hours} 小時），已自動為你累積加時 ${addedHours} 小時（多出金額已保留落下一輪累積）！`);
-                }
-            });
+            if (totalExpectedHours > window.appliedTotalHours) {
+                let diffHours = totalExpectedHours - window.appliedTotalHours;
+                targetEndTime += (diffHours * 60 * 60 * 1000);
+                window.appliedTotalHours = totalExpectedHours;
+                alert(`🎉 總 SC 金額達到 $HKD ${totalSC}！符合條件加時規則，已自動為你加時 ${diffHours} 小時！`);
+            }
         }
 
         calculateTotalSC();
@@ -700,8 +723,7 @@
             streamStartTime = now; 
             targetEndTime = now + (hoursToAdd * 60 * 60 * 1000);
             
-            // 重設加時次數紀錄
-            ruleTriggerCounts = {};
+            window.appliedTotalHours = 0;
 
             if (!timerInterval) {
                 timerInterval = setInterval(updateCountdown, 1000);
@@ -743,7 +765,7 @@
         function resetTimer() {
             targetEndTime = null;
             streamStartTime = null;
-            ruleTriggerCounts = {};
+            window.appliedTotalHours = 0;
             if (timerInterval) {
                 clearInterval(timerInterval);
                 timerInterval = null;
