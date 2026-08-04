@@ -103,6 +103,7 @@
             align-items: center;
             box-shadow: 0 4px 20px rgba(0,0,0,0.03);
             border: 1px solid #E4E6EB;
+            flex-wrap: wrap;
         }
         .control-bar input, .control-bar select {
             padding: 10px 15px;
@@ -113,10 +114,10 @@
             font-size: 13px;
             outline: none;
         }
-        .control-bar input[type="text"] { flex: 2; }
+        .control-bar input[type="text"] { flex: 2; min-width: 200px; }
         .control-bar select { flex: 1; }
         .control-bar button {
-            padding: 10px 20px;
+            padding: 10px 16px;
             border-radius: 10px;
             border: none;
             font-weight: bold;
@@ -306,12 +307,14 @@
             padding: 15px;
             border-radius: 16px;
             border: 1px solid #E4E6EB;
+            flex-wrap: wrap;
         }
         .rule-form-group {
             display: flex;
             flex-direction: column;
             gap: 5px;
             flex: 1;
+            min-width: 140px;
         }
         .rule-form-group label { font-size: 11px; font-weight: bold; color: #65676B; }
         .rule-form-group input, .rule-form-group select {
@@ -374,6 +377,8 @@
             justify-content: space-between;
             align-items: center;
             margin-bottom: 15px;
+            flex-wrap: wrap;
+            gap: 10px;
         }
         .report-section-container h3 { margin: 0; color: #1A1A1A; font-size: 18px; }
         .stream-report-card {
@@ -391,6 +396,8 @@
             border-bottom: 1px solid #E4E6EB;
             padding-bottom: 8px;
             font-size: 13px;
+            flex-wrap: wrap;
+            gap: 6px;
         }
         .timeline-list {
             display: flex;
@@ -453,6 +460,8 @@
                 <option value="4.5" selected>4.5H</option>
             </select>
             <button type="button" onclick="startTimer()" style="background: #0066FF; color: #FFFFFF;">🚀 Start</button>
+            <button type="button" id="pauseBtn" onclick="togglePauseTimer()" style="background: #FF9500; color: #FFFFFF; display: none;">⏸️ 暫停</button>
+            <button type="button" onclick="cutOffTimer()" style="background: #5856D6; color: #FFFFFF;">✂️ Cut Off</button>
             <button type="button" onclick="resetTimer()" style="background: #F4F6F9; color: #1A1A1A; border: 1px solid #E4E6EB;">🔄 重設</button>
         </div>
 
@@ -460,7 +469,7 @@
         <div class="left-section">
             <div class="timer-circle">
                 <span id="countdown">04:30:00</span>
-                <span style="font-size: 11px; color: #65676B; margin-top: 4px;">倒數狀態</span>
+                <span style="font-size: 11px; color: #65676B; margin-top: 4px;" id="timerStateDesc">倒數狀態</span>
             </div>
             <div class="elapsed-text" id="elapsedBox">總直播累積：00:00:00</div>
             <div class="status-text" id="statusBox">狀態：尚未綁定直播</div>
@@ -487,19 +496,11 @@
         <div class="right-section">
             <div class="right-section-header">
                 <h3>🏆 SC 排行榜</h3>
-                <div class="total-sc-badge" id="totalScBadge">總計: $HKD 220</div>
+                <div class="total-sc-badge" id="totalScBadge">總計: $HKD 0</div>
             </div>
-            <div class="sc-card" data-amount="20">
-                <span class="sc-name">1. A</span>
-                <span class="sc-amount">$HKD 20</span>
-            </div>
-            <div class="sc-card" data-amount="50">
-                <span class="sc-name">2. B</span>
-                <span class="sc-amount">$HKD 50</span>
-            </div>
-            <div class="sc-card" data-amount="150">
-                <span class="sc-name">3. C</span>
-                <span class="sc-amount">$HKD 150</span>
+            <!-- 已清空預設 $220 卡片，交由動態輸入或預設為 0 -->
+            <div id="scCardListContainer" style="display: flex; flex-direction: column; gap: 8px;">
+                <!-- 動態SC或初始佔位 -->
             </div>
             <div style="text-align: center; font-size: 11px; color: #65676B; margin-top: auto;">等待實時 SC 接入...</div>
         </div>
@@ -536,7 +537,10 @@
                 <h3>📈 直播歷史與 Super Chat 時間軸報告</h3>
                 <div style="font-size: 12px; color: #65676B; margin-top: 4px;">記錄每一場你輸入並開始過的直播，並按時間軸展示觀眾的課金時間、名稱與金額。</div>
             </div>
-            <button type="button" onclick="clearAllHistory()" style="padding: 9px 16px; background: #FF3B30; color: #FFFFFF; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 12px;">🗑️ 清空所有歷史紀錄</button>
+            <div style="display: flex; gap: 10px;">
+                <button type="button" onclick="resetReportData()" style="padding: 9px 14px; background: #F4F6F9; color: #1A1A1A; border: 1px solid #E4E6EB; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 12px;">🔄 重設 Report</button>
+                <button type="button" onclick="clearAllHistory()" style="padding: 9px 14px; background: #FF3B30; color: #FFFFFF; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 12px;">🗑️ 清空所有歷史紀錄</button>
+            </div>
         </div>
         
         <!-- 歷史報告列表容器 -->
@@ -554,14 +558,34 @@
         let streamStartTime = null;
         let timerInterval = null;
         let currentStreamId = null;
+        let isPaused = false;
+        let pausedRemainingMs = 0;
 
-        // 儲存所有已記錄的直播歷史資料
-        let streamHistory = [];
-        
-        let rules = [
+        // 預設資料或從 localStorage 載入
+        let streamHistory = JSON.parse(localStorage.getItem('streamHistory')) || [];
+        let rules = JSON.parse(localStorage.getItem('streamRules')) || [
             { id: 1, startAmount: 0, stepAmount: 200, hours: 1 },
             { id: 2, startAmount: 5000, stepAmount: 500, hours: 1 }
         ];
+
+        // 初始載入時同步恢復上次輸入的 Link
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedUrl = localStorage.getItem('savedVideoUrl');
+            if (savedUrl) {
+                document.getElementById('video_url').value = savedUrl;
+            }
+            renderSCards();
+            calculateTotalSC();
+            renderReportList();
+        });
+
+        // 儲存狀態至 localStorage 防止重新整理時消失
+        function saveDataToStorage() {
+            localStorage.setItem('streamHistory', JSON.stringify(streamHistory));
+            localStorage.setItem('streamRules', JSON.stringify(rules));
+            const urlVal = document.getElementById('video_url').value;
+            localStorage.setItem('savedVideoUrl', urlVal);
+        }
 
         // 切換畫面
         function switchView(viewName) {
@@ -593,13 +617,54 @@
             }
         }
 
-        // 清空所有直播歷史記錄
+        // 重設 Report 頁面專用按鈕
+        function resetReportData() {
+            if (confirm("⚠️ 確定要重設 Report 頁面的所有顯示狀態與暫存資料嗎？")) {
+                streamHistory = [];
+                saveDataToStorage();
+                renderReportList();
+                alert("🔄 Report 頁面已成功重設！");
+            }
+        }
+
+        // 清空所有直播歷史紀錄
         function clearAllHistory() {
             if (confirm("⚠️ 確定要清空所有直播歷史紀錄嗎？此操作無法復原。")) {
                 streamHistory = [];
+                saveDataToStorage();
                 renderReportList();
                 alert("🗑️ 已成功清空所有直播歷史紀錄！");
             }
+        }
+
+        // 渲染 SC 卡片（初始無預設 $220，若有當前直播則讀取，否則為空）
+        function renderSCards() {
+            const container = document.getElementById("scCardListContainer");
+            container.innerHTML = "";
+
+            let activeScs = [];
+            if (currentStreamId) {
+                let currentStream = streamHistory.find(s => s.id === currentStreamId);
+                if (currentStream && currentStream.scEvents) {
+                    activeScs = currentStream.scEvents;
+                }
+            }
+
+            if (activeScs.length === 0) {
+                container.innerHTML = `<div style="background: #F4F6F9; padding: 12px; border-radius: 12px; text-align: center; color: #65676B; font-size: 12px; border: 1px solid #E4E6EB;">暫無 SC 紀錄 (輸入連結並 Start 後自動生成)</div>`;
+                return;
+            }
+
+            activeScs.forEach(sc => {
+                let card = document.createElement("div");
+                card.className = "sc-card";
+                card.setAttribute("data-amount", sc.amount);
+                card.innerHTML = `
+                    <span class="sc-name">${sc.name}</span>
+                    <span class="sc-amount">$HKD ${sc.amount}</span>
+                `;
+                container.appendChild(card);
+            });
         }
 
         // 渲染 Report 報告清單
@@ -694,6 +759,7 @@
             };
 
             rules.push(newRule);
+            saveDataToStorage();
             renderRuleList();
             alert("✅ 成功新增條件加時區段！");
             checkAndApplyRules();
@@ -701,6 +767,7 @@
 
         function deleteRule(id) {
             rules = rules.filter(r => r.id !== id);
+            saveDataToStorage();
             renderRuleList();
             checkAndApplyRules();
         }
@@ -731,7 +798,6 @@
             rules.sort((a, b) => a.startAmount - b.startAmount);
 
             let totalExpectedHours = 0;
-            let remainingSC = totalSC;
             let previousThreshold = 0;
 
             for (let i = 0; i < rules.length; i++) {
@@ -762,8 +828,6 @@
                 alert(`🎉 總 SC 金額達到 $HKD ${totalSC}！符合條件加時規則，已自動為你加時 ${diffHours} 小時！`);
             }
         }
-
-        calculateTotalSC();
 
         function updateHKClockAndCalendar() {
             const now = new Date();
@@ -823,28 +887,35 @@
             const now = new Date().getTime();
             streamStartTime = now; 
             targetEndTime = now + (hoursToAdd * 60 * 60 * 1000);
+            isPaused = false;
             
             window.appliedTotalHours = 0;
             currentStreamId = Date.now();
 
-            let scEvents = [];
-            const amountElements = document.querySelectorAll('.sc-card');
-            amountElements.forEach((card, idx) => {
-                const name = card.querySelector('.sc-name').innerText;
-                const amt = card.getAttribute('data-amount');
-                let eventTime = new Date(now + (idx * 60000)).toLocaleTimeString("en-US", { timeZone: "Asia/Hong_Kong", hour12: false });
-                scEvents.push({ time: eventTime, name: name, amount: amt });
-            });
+            // 模擬生成幾筆 SC 數據作為演示
+            let scEvents = [
+                { time: new Date(now).toLocaleTimeString("en-US", { timeZone: "Asia/Hong_Kong", hour12: false }), name: "1. A", amount: "50" },
+                { time: new Date(now + 30000).toLocaleTimeString("en-US", { timeZone: "Asia/Hong_Kong", hour12: false }), name: "2. B", amount: "100" }
+            ];
 
             let newStreamRecord = {
                 id: currentStreamId,
                 videoId: videoId,
                 startTimeStr: new Date(now).toLocaleString("en-US", { timeZone: "Asia/Hong_Kong" }),
-                totalAmount: calculateTotalSC(),
+                totalAmount: 150,
                 scEvents: scEvents
             };
 
             streamHistory.unshift(newStreamRecord);
+            saveDataToStorage();
+
+            renderSCards();
+            calculateTotalSC();
+            renderReportList();
+
+            document.getElementById("pauseBtn").style.display = "inline-block";
+            document.getElementById("pauseBtn").innerText = "⏸️ 暫停";
+            document.getElementById("timerStateDesc").innerText = "倒數狀態";
 
             if (!timerInterval) {
                 timerInterval = setInterval(updateCountdown, 1000);
@@ -853,8 +924,57 @@
             updateCountdown();
         }
 
+        // 2. 暫停 / 繼續倒數制
+        function togglePauseTimer() {
+            if (!targetEndTime && !isPaused) return;
+
+            const pauseBtn = document.getElementById("pauseBtn");
+            const timerStateDesc = document.getElementById("timerStateDesc");
+
+            if (!isPaused) {
+                // 進入暫停
+                pausedRemainingMs = targetEndTime - new Date().getTime();
+                isPaused = true;
+                if (timerInterval) {
+                    clearInterval(timerInterval);
+                    timerInterval = null;
+                }
+                pauseBtn.innerText = "▶️ 繼續";
+                pauseBtn.style.background = "#34C759";
+                timerStateDesc.innerText = "狀態：已暫停";
+            } else {
+                // 恢復倒數
+                targetEndTime = new Date().getTime() + pausedRemainingMs;
+                isPaused = false;
+                timerInterval = setInterval(updateCountdown, 1000);
+                pauseBtn.innerText = "⏸️ 暫停";
+                pauseBtn.style.background = "#FF9500";
+                timerStateDesc.innerText = "倒數狀態";
+            }
+        }
+
+        // 3. Cut Off 制 (直接將倒數歸零或結束當前倒數計時)
+        function cutOffTimer() {
+            if (!targetEndTime && !isPaused) {
+                alert("⚠️ 目前並無正在進行中的倒數計時！");
+                return;
+            }
+            if (confirm("✂️ 確定要執行 Cut Off 立即終止並歸零倒數嗎？")) {
+                targetEndTime = new Date().getTime(); // 設為當前時間即歸零
+                isPaused = false;
+                if (timerInterval) {
+                    clearInterval(timerInterval);
+                    timerInterval = null;
+                }
+                document.getElementById("countdown").innerHTML = "00:00:00";
+                document.getElementById("timerStateDesc").innerText = "狀態：已 Cut Off 終止";
+                document.getElementById("pauseBtn").style.display = "none";
+                alert("✂️ 已成功執行 Cut Off！");
+            }
+        }
+
         function updateCountdown() {
-            if (!targetEndTime) return;
+            if (!targetEndTime || isPaused) return;
 
             const now = new Date().getTime();
             
@@ -887,15 +1007,25 @@
             targetEndTime = null;
             streamStartTime = null;
             currentStreamId = null;
+            isPaused = false;
             window.appliedTotalHours = 0;
             if (timerInterval) {
                 clearInterval(timerInterval);
                 timerInterval = null;
             }
             document.getElementById("countdown").innerHTML = "04:30:00";
+            document.getElementById("timerStateDesc").innerText = "倒數狀態";
             document.getElementById("elapsedBox").innerText = "總直播累積：00:00:00";
             document.getElementById("statusBox").innerHTML = "狀態：已重設";
+            document.getElementById("pauseBtn").style.display = "none";
+            renderSCards();
+            calculateTotalSC();
         }
+
+        // 監聽 input 變動即時儲存 Link 避免refreash不見
+        document.getElementById('video_url').addEventListener('input', function() {
+            saveDataToStorage();
+        });
     </script>
 </body>
 </html>
