@@ -129,10 +129,7 @@
             const streamId = now;
 
             // 確保每次輸入新連結開始時計時，都有預設 SC 數據寫入以防空白
-            const scEvents = [
-                { time: new Date(now).toLocaleTimeString("en-US", { timeZone: "Asia/Hong_Kong", hour12: false }), name: "支持者 A", amount: 100 },
-                { time: new Date(now + 3000).toLocaleTimeString("en-US", { timeZone: "Asia/Hong_Kong", hour12: false }), name: "支持者 B", amount: 250 }
-            ];
+            const scEvents = [];
 
             await setDoc(docRef, {
                 videoUrl: videoUrl,
