@@ -25,6 +25,7 @@
         const db = getFirestore(app);
 
         let timerInterval = null;
+        let scPollInterval = null; // YouTube API 輪詢計時器
         const docRef = doc(db, "streams", "current_stream");
 
         window.addEventListener('DOMContentLoaded', async () => {
@@ -43,6 +44,9 @@
                     if (data.videoUrl) {
                         document.getElementById('video_url').value = data.videoUrl;
                     }
+                    if (data.ytApiKey) {
+                        document.getElementById('yt_api_key').value = data.ytApiKey;
+                    }
                     
                     if (data.status === "running" || data.status === "paused" || data.status === "cutoff") {
                         window.serverTargetEndTime = data.targetEndTime;
@@ -56,18 +60,25 @@
                             document.getElementById("pauseBtn").innerText = "⏸️ 暫停";
                             document.getElementById("timerStateDesc").innerText = "雲端倒數中";
                             if (!timerInterval) timerInterval = setInterval(updateCountdown, 1000);
+                            
+                            // 若是 running 且有 liveChatId，啟動背景實時抓取 SC
+                            if (data.liveChatId && data.ytApiKey && !scPollInterval) {
+                                startScPolling(data.liveChatId, data.ytApiKey);
+                            }
                         } else if (data.status === "paused") {
                             document.getElementById("statusBox").innerHTML = `狀態：已暫停`;
                             document.getElementById("pauseBtn").style.display = "inline-block";
                             document.getElementById("pauseBtn").innerText = "▶️ 繼續";
                             document.getElementById("timerStateDesc").innerText = "雲端已暫停";
                             if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+                            if (scPollInterval) { clearInterval(scPollInterval); scPollInterval = null; }
                             displayPausedTime(data.pausedRemainingMs);
                         } else if (data.status === "cutoff") {
                             document.getElementById("statusBox").innerHTML = `狀態：已埋數 (等待新Link)`;
                             document.getElementById("timerStateDesc").innerText = "已埋數運行中";
                             document.getElementById("pauseBtn").style.display = "none";
                             if (!timerInterval) timerInterval = setInterval(updateCountdown, 1000);
+                            if (scPollInterval) { clearInterval(scPollInterval); scPollInterval = null; }
                         }
                     } else if (data.status === "reset") {
                         resetUIState();
@@ -98,7 +109,87 @@
             return { title, thumbnail };
         }
 
-        // 開始計時（修復：確保每次輸入Link都能自動生成並記錄初始 Super Chat 資料）
+        // 透過 YouTube API 取得直播的 liveChatId
+        async function fetchLiveChatId(videoId, apiKey) {
+            try {
+                const res = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails&id=${videoId}&key=${apiKey}`);
+                const data = await res.json();
+                if (data.items && data.items.length > 0) {
+                    return data.items[0].liveStreamingDetails?.activeLiveChatId || null;
+                }
+            } catch (e) {
+                console.error("獲取 liveChatId 失敗:", e);
+            }
+            return null;
+        }
+
+        // 開始輪詢真實 YouTube Super Chat 訊息
+        function startScPolling(liveChatId, apiKey) {
+            if (scPollInterval) clearInterval(scPollInterval);
+            
+            let nextPageToken = null;
+
+            async function poll() {
+                try {
+                    let url = `https://www.googleapis.com/youtube/v3/liveChat/messages?liveChatId=${liveChatId}&part=snippet,authorDetails&key=${apiKey}`;
+                    if (nextPageToken) {
+                        url += `&pageToken=${nextPageToken}`;
+                    }
+
+                    const res = await fetch(url);
+                    if (!res.ok) return;
+                    const data = await res.json();
+
+                    if (data.nextPageToken) {
+                        nextPageToken = data.nextPageToken;
+                    }
+
+                    if (data.items && data.items.length > 0) {
+                        let newScFound = false;
+                        const snap = await getDoc(docRef);
+                        if (!snap.exists()) return;
+                        let currentData = snap.data();
+                        let existingEvents = currentData.scEvents || [];
+                        
+                        // 建立已有 ID 集合避免重複
+                        const existingIds = new Set(existingEvents.map(e => e.id));
+
+                        data.items.forEach(item => {
+                            // 檢查是否為 SuperChat 事件 (superChatEvent)
+                            if (item.snippet.type === 'superChatEvent') {
+                                const scDetails = item.snippet.superChatEvent;
+                                const author = item.authorDetails.displayName;
+                                const amountFormatted = scDetails.amountDisplayString; // 例如 "$100.00" 或 "HK$50.00"
+                                const rawAmount = scDetails.amountMicros ? (scDetails.amountMicros / 1000000) : 0;
+                                const eventId = item.id;
+
+                                if (!existingIds.has(eventId)) {
+                                    existingEvents.push({
+                                        id: eventId,
+                                        time: new Date(item.snippet.publishedAt).toLocaleTimeString("en-US", { timeZone: "Asia/Hong_Kong", hour12: false }),
+                                        name: author,
+                                        amount: rawAmount > 0 ? rawAmount : amountFormatted
+                                    });
+                                    newScFound = true;
+                                }
+                            }
+                        });
+
+                        if (newScFound) {
+                            await updateDoc(docRef, { scEvents: existingEvents });
+                        }
+                    }
+                } catch (e) {
+                    console.error("輪詢 SC 出錯:", e);
+                }
+            }
+
+            // 立即執行一次，之後每 10 秒抓取一次
+            poll();
+            scPollInterval = setInterval(poll, 10000);
+        }
+
+        // 開始計時
         async function startTimer() {
             const snap = await getDoc(docRef);
             if (snap.exists()) {
@@ -110,6 +201,8 @@
             }
 
             const videoUrl = document.getElementById("video_url").value.trim();
+            const apiKey = document.getElementById("yt_api_key").value.trim();
+
             let videoId = "";
             if (videoUrl.includes("youtu.be/")) {
                 videoId = videoUrl.split("youtu.be/")[1].split("?")[0];
@@ -122,30 +215,40 @@
                 return;
             }
 
+            if (!apiKey) {
+                alert("⚠️ 請先輸入你的 YouTube Data API Key，否則無法實時讀取真實 Super Chat！");
+                return;
+            }
+
             const ytInfo = await fetchYouTubeInfo(videoUrl, videoId);
+            const liveChatId = await fetchLiveChatId(videoId, apiKey);
+
+            if (!liveChatId) {
+                alert("⚠️ 警告：無法獲取該直播的 LiveChatId（可能是直播尚未開始、已結束、或未開啟聊天室/API Key權限不足）。系統將正常計時，但暫無法聯動 SC。");
+            }
+
             const hoursToAdd = parseFloat(document.getElementById("duration").value);
             const now = Date.now();
             const targetEndTime = now + (hoursToAdd * 60 * 60 * 1000);
             const streamId = now;
-
-            // 確保每次輸入新連結開始時計時，都有預設 SC 數據寫入以防空白
-            const scEvents = [];
 
             await setDoc(docRef, {
                 videoUrl: videoUrl,
                 videoId: videoId,
                 videoTitle: ytInfo.title,
                 thumbnailUrl: ytInfo.thumbnail,
+                ytApiKey: apiKey,
+                liveChatId: liveChatId || "",
                 startTime: now,
                 targetEndTime: targetEndTime,
                 status: "running",
                 isPaused: false,
                 pausedRemainingMs: 0,
                 streamId: streamId,
-                scEvents: scEvents
+                scEvents: [] // 初始化為空，等待真實 SC 進入
             });
 
-            alert("🚀 成功啟動雲端計時與 SC 記錄同步！");
+            alert("🚀 成功啟動雲端計時與真實 SC 實時監聽！");
         }
 
         // 暫停/繼續
@@ -178,7 +281,9 @@
 
         // Cut Off 埋數：寫入 record 並停止課金計算
         async function cutOffTimer() {
-            if (confirm("✂️ 確定要進行「直播埋數」嗎？埋數後將停止課金計算並封存記錄。")) {
+            if (confirm("✂️ 確定要進行「直播埋數」嗎？埋數後將停止真實 SC 抓取並封存記錄。")) {
+                if (scPollInterval) { clearInterval(scPollInterval); scPollInterval = null; }
+                
                 const snap = await getDoc(docRef);
                 if (snap.exists()) {
                     const data = snap.data();
@@ -223,6 +328,7 @@
         // 重設
         async function resetTimer() {
             if (confirm("🔄 確定要重設計時嗎？")) {
+                if (scPollInterval) { clearInterval(scPollInterval); scPollInterval = null; }
                 await setDoc(docRef, {
                     status: "reset",
                     videoUrl: "",
@@ -234,12 +340,13 @@
 
         function resetUIState() {
             if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+            if (scPollInterval) { clearInterval(scPollInterval); scPollInterval = null; }
             document.getElementById("countdown").innerHTML = "04:30:00";
             document.getElementById("timerStateDesc").innerText = "雲端待機中";
             document.getElementById("elapsedBox").innerText = "總直播累積：00:00:00";
             document.getElementById("statusBox").innerHTML = "狀態：未開始";
             document.getElementById("pauseBtn").style.display = "none";
-            document.getElementById("scCardListContainer").innerHTML = `<div style="text-align: center; color: #65676B; font-size: 12px;">暫無 SC 紀錄</div>`;
+            document.getElementById("scCardListContainer").innerHTML = `<div style="text-align: center; color: #65676B; font-size: 12px;">暫無真實 SC 紀錄</div>`;
             document.getElementById("totalScBadge").innerText = "總計: $HKD 0";
         }
 
@@ -251,7 +358,7 @@
             document.getElementById("countdown").innerHTML = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
         }
 
-        // 倒數計時（歸零後直接停止在 00:00:00）
+        // 倒數計時
         function updateCountdown() {
             if (!window.serverTargetEndTime || window.serverIsPaused) return;
 
@@ -282,7 +389,7 @@
             let total = 0;
 
             if (!scEvents || scEvents.length === 0) {
-                container.innerHTML = `<div style="text-align: center; color: #65676B; font-size: 12px;">暫無 SC 紀錄</div>`;
+                container.innerHTML = `<div style="text-align: center; color: #65676B; font-size: 12px; padding: 20px;">等待真實 Super Chat 進入中...</div>`;
                 document.getElementById("totalScBadge").innerText = "總計: $HKD 0";
                 return;
             }
@@ -293,7 +400,7 @@
                 card.className = "sc-card";
                 card.innerHTML = `
                     <span class="sc-name">${sc.name}</span>
-                    <span class="sc-amount">$HKD ${sc.amount}</span>
+                    <span class="sc-amount">${typeof sc.amount === 'number' ? '$HKD ' + sc.amount : sc.amount}</span>
                 `;
                 container.appendChild(card);
             });
@@ -317,8 +424,6 @@
 
                 let docsArray = [];
                 querySnapshot.forEach((doc) => { docsArray.push(doc.data()); });
-
-                // 倒序排列（最新埋數的排在最上面）
                 docsArray.reverse();
 
                 docsArray.forEach(data => {
@@ -331,7 +436,7 @@
                             scRows += `
                                 <div style="display: flex; justify-content: space-between; padding: 6px 10px; border-bottom: 1px solid #F4F6F9; font-size: 12px;">
                                     <span style="color: #65676B;">${sc.time || ''} - <strong>${sc.name}</strong></span>
-                                    <span style="color: #0066FF; font-weight: bold;">$HKD ${sc.amount}</span>
+                                    <span style="color: #0066FF; font-weight: bold;">${typeof sc.amount === 'number' ? '$HKD ' + sc.amount : sc.amount}</span>
                                 </div>
                             `;
                         });
@@ -446,13 +551,13 @@
         .dashboard-grid { width: 100%; max-width: 1200px; display: grid; grid-template-columns: 360px 320px 450px; gap: 25px; }
         .control-bar {
             grid-column: 1 / -1; background: #FFFFFF; padding: 15px 25px; border-radius: 20px;
-            display: flex; gap: 15px; align-items: center; box-shadow: 0 4px 20px rgba(0,0,0,0.03); border: 1px solid #E4E6EB; flex-wrap: wrap;
+            display: flex; gap: 12px; align-items: center; box-shadow: 0 4px 20px rgba(0,0,0,0.03); border: 1px solid #E4E6EB; flex-wrap: wrap;
         }
         .control-bar input, .control-bar select {
-            padding: 10px 15px; border-radius: 10px; border: 1px solid #E4E6EB; background: #F4F6F9; color: #1A1A1A; font-size: 13px; outline: none;
+            padding: 10px 14px; border-radius: 10px; border: 1px solid #E4E6EB; background: #F4F6F9; color: #1A1A1A; font-size: 13px; outline: none;
         }
-        .control-bar input[type="text"] { flex: 2; min-width: 200px; }
-        .control-bar select { flex: 1; }
+        .control-bar input[type="text"] { flex: 2; min-width: 180px; }
+        .control-bar select { flex: 1; min-width: 90px; }
         .control-bar button { padding: 10px 16px; border-radius: 10px; border: none; font-weight: bold; cursor: pointer; font-size: 13px; }
         .left-section {
             background: #FFFFFF; border-radius: 24px; padding: 30px; display: flex; flex-direction: column;
@@ -496,7 +601,6 @@
         .sc-name { font-weight: bold; font-size: 13px; color: #1A1A1A; }
         .sc-amount { color: #0066FF; font-weight: bold; font-size: 13px; }
         
-        /* 記錄頁面新介面樣式 */
         .record-container {
             width: 100%; max-width: 900px; display: flex; flex-direction: column; gap: 20px; display: none;
         }
@@ -516,13 +620,14 @@
             <button class="tab-btn" id="tabDashboardBtn" onclick="switchTab('dashboard')" style="background: #1A1A1A; color: #FFFFFF;">主控台</button>
             <button class="tab-btn" id="tabRecordBtn" onclick="switchTab('record')">📋 歷史 Record 列表</button>
         </div>
-        <div style="font-size: 12px; color: #65676B;">🔥 雲端同步模式</div>
+        <div style="font-size: 12px; color: #65676B;">🔥 實時 API 抓取模式</div>
     </div>
 
     <!-- 主控台頁面 -->
     <div class="dashboard-grid" id="dashboardView">
         <div class="control-bar">
             <input type="text" id="video_url" placeholder="請輸入 YouTube 直播 Link..." required>
+            <input type="text" id="yt_api_key" placeholder="輸入 YouTube Data API Key..." style="flex: 1.2; min-width: 150px;">
             <select id="duration">
                 <option value="2">2H</option>
                 <option value="2.5">2.5H</option>
@@ -565,13 +670,13 @@
 
         <div class="right-section">
             <div class="right-section-header">
-                <h3>🏆 雲端 SC 排行榜</h3>
+                <h3>🏆 實時 SC 排行榜</h3>
                 <div class="total-sc-badge" id="totalScBadge">總計: $HKD 0</div>
             </div>
             <div id="scCardListContainer" style="display: flex; flex-direction: column; gap: 8px;">
-                <div style="text-align: center; color: #65676B; font-size: 12px; padding: 20px;">暫無 SC 紀錄</div>
+                <div style="text-align: center; color: #65676B; font-size: 12px; padding: 20px;">等待真實 Super Chat 進入中...</div>
             </div>
-            <div style="text-align: center; font-size: 11px; color: #65676B; margin-top: auto;">連線狀態：雲端實時同步中 🟢</div>
+            <div style="text-align: center; font-size: 11px; color: #65676B; margin-top: auto;">連線狀態：YouTube API 實時監聽中 🟢</div>
         </div>
     </div>
 
