@@ -80,9 +80,10 @@
                         }
                     }
 
-                    // 渲染 SC 榜
+                    // 渲染 SC 榜與歷史紀錄頁面
                     if (data.scEvents) {
                         renderSCards(data.scEvents);
+                        renderRecordTable(data.scEvents);
                     }
                 }
             });
@@ -191,6 +192,7 @@
             document.getElementById("pauseBtn").style.display = "none";
             document.getElementById("scCardListContainer").innerHTML = `<div style="text-align: center; color: #65676B; font-size: 12px;">暫無 SC 紀錄</div>`;
             document.getElementById("totalScBadge").innerText = "總計: $HKD 0";
+            document.getElementById("recordTableBody").innerHTML = `<tr><td colspan="3" style="text-align: center; color: #65676B; padding: 15px;">暫無詳細紀錄</td></tr>`;
         }
 
         function displayPausedTime(ms) {
@@ -256,6 +258,52 @@
             document.getElementById("totalScBadge").innerText = `總計: $HKD ${total}`;
         }
 
+        // 渲染 Record 記錄詳細表格頁面
+        function renderRecordTable(scEvents) {
+            const tbody = document.getElementById("recordTableBody");
+            if (!tbody) return;
+            tbody.innerHTML = "";
+
+            if (!scEvents || scEvents.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: #65676B; padding: 15px;">暫無詳細紀錄</td></tr>`;
+                return;
+            }
+
+            scEvents.forEach(sc => {
+                let tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td style="padding: 10px; border-bottom: 1px solid #E4E6EB; font-size: 12px; color: #65676B;">${sc.time || '--:--:--'}</td>
+                    <td style="padding: 10px; border-bottom: 1px solid #E4E6EB; font-size: 13px; font-weight: bold; color: #1A1A1A;">${sc.name}</td>
+                    <td style="padding: 10px; border-bottom: 1px solid #E4E6EB; font-size: 13px; font-weight: bold; color: #0066FF; text-align: right;">$HKD ${sc.amount}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // 分頁切換控制
+        function switchTab(tabName) {
+            const dashboardView = document.getElementById("dashboardView");
+            const recordView = document.getElementById("recordView");
+            const tabDashboardBtn = document.getElementById("tabDashboardBtn");
+            const tabRecordBtn = document.getElementById("tabRecordBtn");
+
+            if (tabName === 'dashboard') {
+                dashboardView.style.display = "grid";
+                recordView.style.display = "none";
+                tabDashboardBtn.style.background = "#1A1A1A";
+                tabDashboardBtn.style.color = "#FFFFFF";
+                tabRecordBtn.style.background = "#F4F6F9";
+                tabRecordBtn.style.color = "#1A1A1A";
+            } else {
+                dashboardView.style.display = "none";
+                recordView.style.display = "block";
+                tabRecordBtn.style.background = "#1A1A1A";
+                tabRecordBtn.style.color = "#FFFFFF";
+                tabDashboardBtn.style.background = "#F4F6F9";
+                tabDashboardBtn.style.color = "#1A1A1A";
+            }
+        }
+
         function updateHKClockAndCalendar() {
             const now = new Date();
             const hkTimeStr = now.toLocaleString("en-US", { timeZone: "Asia/Hong_Kong" });
@@ -296,6 +344,7 @@
         window.togglePauseTimer = togglePauseTimer;
         window.cutOffTimer = cutOffTimer;
         window.resetTimer = resetTimer;
+        window.switchTab = switchTab;
     </script>
     <style>
         * { box-sizing: border-box; }
@@ -309,6 +358,11 @@
             background: #FFFFFF; padding: 12px 25px; border-radius: 50px; box-shadow: 0 4px 20px rgba(0,0,0,0.03); margin-bottom: 30px;
         }
         .nav-logo { font-weight: bold; font-size: 18px; color: #1A1A1A; display: flex; align-items: center; gap: 8px; }
+        .nav-tabs { display: flex; gap: 8px; }
+        .tab-btn {
+            padding: 8px 16px; border-radius: 20px; border: 1px solid #E4E6EB; background: #F4F6F9; 
+            color: #1A1A1A; font-size: 12px; font-weight: bold; cursor: pointer; transition: all 0.2s;
+        }
         .dashboard-grid { width: 100%; max-width: 1200px; display: grid; grid-template-columns: 360px 320px 450px; gap: 25px; }
         .control-bar {
             grid-column: 1 / -1; background: #FFFFFF; padding: 15px 25px; border-radius: 20px;
@@ -361,6 +415,12 @@
         }
         .sc-name { font-weight: bold; font-size: 13px; color: #1A1A1A; }
         .sc-amount { color: #0066FF; font-weight: bold; font-size: 13px; }
+        
+        /* 記錄詳細頁面樣式 */
+        .record-container {
+            width: 100%; max-width: 1200px; background: #FFFFFF; border-radius: 24px; padding: 30px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.03); border: 1px solid #E4E6EB; display: none;
+        }
     </style>
 </head>
 <body>
@@ -369,10 +429,15 @@
         <div class="nav-logo">
             <span style="color: #0066FF; font-size: 20px;">✦</span> 雲端加班台 Dashboard
         </div>
+        <div class="nav-tabs">
+            <button class="tab-btn" id="tabDashboardBtn" onclick="switchTab('dashboard')" style="background: #1A1A1A; color: #FFFFFF;">主控台</button>
+            <button class="tab-btn" id="tabRecordBtn" onclick="switchTab('record')">📋 詳細紀錄</button>
+        </div>
         <div style="font-size: 12px; color: #65676B;">🔥 雲端同步模式：支援 20 日超長續航、F5 零丟失</div>
     </div>
 
-    <div class="dashboard-grid">
+    <!-- 主控台頁面 -->
+    <div class="dashboard-grid" id="dashboardView">
         <!-- 頂部控制列 -->
         <div class="control-bar">
             <input type="text" id="video_url" placeholder="請輸入 YouTube 直播 Link..." required>
@@ -429,6 +494,25 @@
             </div>
             <div style="text-align: center; font-size: 11px; color: #65676B; margin-top: auto;">連線狀態：雲端實時同步中 🟢</div>
         </div>
+    </div>
+
+    <!-- 📋 詳細紀錄頁面 (Record Page) -->
+    <div class="record-container" id="recordView">
+        <h2 style="margin-top: 0; font-size: 18px; color: #1A1A1A; border-bottom: 2px solid #E4E6EB; padding-bottom: 12px;">📋 直播 SC 詳細歷史紀錄</h2>
+        <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+            <thead>
+                <tr style="background: #F4F6F9; text-align: left;">
+                    <th style="padding: 10px; border-bottom: 1px solid #E4E6EB; font-size: 12px; color: #65676B;">時間</th>
+                    <th style="padding: 10px; border-bottom: 1px solid #E4E6EB; font-size: 12px; color: #65676B;">名稱 / 贊助者</th>
+                    <th style="padding: 10px; border-bottom: 1px solid #E4E6EB; font-size: 12px; color: #65676B; text-align: right;">金額</th>
+                </tr>
+            </thead>
+            <tbody id="recordTableBody">
+                <tr>
+                    <td colspan="3" style="text-align: center; color: #65676B; padding: 15px; font-size: 12px;">暫無詳細紀錄</td>
+                </tr>
+            </tbody>
+        </table>
     </div>
 
 </body>
