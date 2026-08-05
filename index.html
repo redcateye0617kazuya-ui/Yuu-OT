@@ -2,831 +2,259 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="utf-8">
-    <title>加班台 Dashboard</title>
-    <style>
-        * { box-sizing: border-box; }
-        body { 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
-            background: #F4F6F9; 
-            color: #1A1A1A; 
-            margin: 0; 
-            padding: 20px 40px; 
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            min-height: 100vh;
-        }
+    <title>雲端加班台 Dashboard</title>
+    <!-- 引入 Firebase SDK (v10 模組化版本) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-        /* 頂部導航列 */
-        .navbar {
-            width: 100%;
-            max-width: 1200px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: #FFFFFF;
-            padding: 12px 25px;
-            border-radius: 50px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.03);
-            margin-bottom: 30px;
-        }
-        .nav-logo {
-            font-weight: bold;
-            font-size: 18px;
-            color: #1A1A1A;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .nav-links {
-            display: flex;
-            gap: 10px;
-            background: #F4F6F9;
-            padding: 4px;
-            border-radius: 30px;
-        }
-        .nav-item {
-            padding: 8px 18px;
-            border-radius: 20px;
-            font-size: 13px;
-            font-weight: 500;
-            color: #65676B;
-            cursor: pointer;
-            border: none;
-            background: transparent;
-        }
-        .nav-item.active {
-            background: #FFFFFF;
-            color: #1A1A1A;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-            font-weight: bold;
-        }
-        .nav-right-icons {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
-        .icon-btn {
-            width: 38px;
-            height: 38px;
-            border-radius: 50%;
-            background: #F4F6F9;
-            border: none;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            font-size: 14px;
-        }
-        .icon-btn.primary {
-            background: #0066FF;
-            color: #FFFFFF;
-        }
+        // ==========================================
+        // 請將下面這裡換成你自己的 Firebase 設定配置
+        // ==========================================
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
 
-        /* 主控台網格佈局 */
-        .dashboard-grid {
-            width: 100%;
-            max-width: 1200px;
-            display: grid;
-            grid-template-columns: 360px 320px 450px;
-            gap: 25px;
-        }
+        // 初始化 Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
 
-        /* 頂部控制列 */
-        .control-bar {
-            grid-column: 1 / -1;
-            background: #FFFFFF;
-            padding: 15px 25px;
-            border-radius: 20px;
-            display: flex;
-            gap: 15px;
-            align-items: center;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.03);
-            border: 1px solid #E4E6EB;
-            flex-wrap: wrap;
-        }
-        .control-bar input, .control-bar select {
-            padding: 10px 15px;
-            border-radius: 10px;
-            border: 1px solid #E4E6EB;
-            background: #F4F6F9;
-            color: #1A1A1A;
-            font-size: 13px;
-            outline: none;
-        }
-        .control-bar input[type="text"] { flex: 2; min-width: 200px; }
-        .control-bar select { flex: 1; }
-        .control-bar button {
-            padding: 10px 16px;
-            border-radius: 10px;
-            border: none;
-            font-weight: bold;
-            cursor: pointer;
-            font-size: 13px;
-        }
-
-        /* 左側：倒數時鐘核心區 */
-        .left-section {
-            background: #FFFFFF;
-            border-radius: 24px;
-            padding: 30px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.03);
-            border: 1px solid #E4E6EB;
-            text-align: center;
-        }
-        .timer-circle {
-            width: 220px;
-            height: 220px;
-            border-radius: 50%;
-            border: 8px solid #1A1A1A;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            background: #FFFFFF;
-            box-shadow: inset 0 5px 15px rgba(0,0,0,0.05);
-            margin-bottom: 15px;
-        }
-        .timer-circle span {
-            font-size: 26px;
-            color: #1A1A1A;
-            font-weight: bold;
-            letter-spacing: 1px;
-        }
-        .status-text {
-            font-size: 13px;
-            color: #65676B;
-            margin-top: 5px;
-        }
-        .elapsed-text {
-            font-size: 12px;
-            color: #0066FF;
-            font-weight: bold;
-            margin-top: 8px;
-        }
-
-        /* 中間：日曆與時間區 */
-        .middle-section {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
-        .calendar-widget-split {
-            background: #FFFFFF;
-            padding: 15px;
-            border-radius: 20px;
-            border: 1px solid #E4E6EB;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.03);
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        .cal-month-box {
-            background: #F4F6F9;
-            padding: 15px 12px;
-            border-radius: 14px;
-            text-align: center;
-            min-width: 90px;
-            border: 1px solid #E4E6EB;
-        }
-        .cal-month-box .month-name {
-            font-size: 14px;
-            font-weight: bold;
-            color: #1A1A1A;
-            margin-top: 2px;
-        }
-        .cal-days-right {
-            display: flex;
-            gap: 5px;
-            justify-content: space-between;
-            flex-grow: 1;
-        }
-        .cal-day-item {
-            text-align: center;
-            padding: 8px 4px;
-            border-radius: 12px;
-            font-size: 10px;
-            color: #65676B;
-            background: #F4F6F9;
-            flex: 1;
-            border: 1px solid #E4E6EB;
-        }
-        .cal-day-item.active {
-            background: #1A1A1A;
-            color: #FFFFFF;
-            font-weight: bold;
-            border-color: #1A1A1A;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-        }
-        .cal-day-item.active .day-num {
-            color: #FFFFFF;
-        }
-        .cal-day-item .day-num {
-            font-size: 13px;
-            font-weight: bold;
-            color: #1A1A1A;
-            margin-top: 3px;
-        }
-
-        .widget-box {
-            background: #FFFFFF;
-            padding: 22px;
-            border-radius: 20px;
-            border: 1px solid #E4E6EB;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.03);
-            font-size: 13px;
-            text-align: center;
-        }
-
-        /* 右側：Super Chat 排行榜 */
-        .right-section {
-            background: #FFFFFF;
-            border-radius: 24px;
-            padding: 22px;
-            border: 1px solid #E4E6EB;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.03);
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-        .right-section-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 4px;
-        }
-        .right-section h3 {
-            margin: 0;
-            color: #1A1A1A;
-            font-size: 15px;
-        }
-        .total-sc-badge {
-            background: #E8F0FE;
-            color: #0066FF;
-            font-size: 11px;
-            font-weight: bold;
-            padding: 4px 8px;
-            border-radius: 8px;
-        }
-        .sc-card {
-            background: #F4F6F9;
-            padding: 14px 18px;
-            border-radius: 14px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-left: 5px solid #0066FF;
-            border-top: 1px solid #E4E6EB;
-            border-right: 1px solid #E4E6EB;
-            border-bottom: 1px solid #E4E6EB;
-        }
-        .sc-name { font-weight: bold; font-size: 13px; color: #1A1A1A; }
-        .sc-amount { color: #0066FF; font-weight: bold; font-size: 13px; }
-
-        /* Rule Setting 區塊 */
-        .rule-section-container {
-            grid-column: 1 / -1;
-            background: #FFFFFF;
-            padding: 25px;
-            border-radius: 24px;
-            border: 1px solid #E4E6EB;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.03);
-            display: none;
-        }
-        .rule-section-container h3 { margin-top: 0; color: #1A1A1A; font-size: 18px; margin-bottom: 15px; }
-        .rule-form-row {
-            display: flex;
-            gap: 12px;
-            align-items: flex-end;
-            margin-bottom: 20px;
-            background: #F4F6F9;
-            padding: 15px;
-            border-radius: 16px;
-            border: 1px solid #E4E6EB;
-            flex-wrap: wrap;
-        }
-        .rule-form-group {
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-            flex: 1;
-            min-width: 140px;
-        }
-        .rule-form-group label { font-size: 11px; font-weight: bold; color: #65676B; }
-        .rule-form-group input, .rule-form-group select {
-            padding: 9px 12px;
-            border-radius: 10px;
-            border: 1px solid #E4E6EB;
-            background: #FFFFFF;
-            font-size: 13px;
-        }
-        .rule-add-btn {
-            padding: 9px 20px;
-            background: #0066FF;
-            color: #FFFFFF;
-            border: none;
-            border-radius: 10px;
-            font-weight: bold;
-            cursor: pointer;
-            font-size: 13px;
-            height: 38px;
-        }
-        .rule-list {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-        .rule-item-card {
-            background: #F4F6F9;
-            padding: 12px 18px;
-            border-radius: 14px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border: 1px solid #E4E6EB;
-            font-size: 13px;
-        }
-        .rule-item-info { font-weight: 500; color: #1A1A1A; }
-        .rule-delete-btn {
-            background: #FF3B30;
-            color: #FFFFFF;
-            border: none;
-            padding: 6px 12px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 11px;
-            font-weight: bold;
-        }
-
-        /* Report 區塊樣式 */
-        .report-section-container {
-            grid-column: 1 / -1;
-            background: #FFFFFF;
-            padding: 25px;
-            border-radius: 24px;
-            border: 1px solid #E4E6EB;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.03);
-            display: none;
-        }
-        .report-header-flex {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-        .report-section-container h3 { margin: 0; color: #1A1A1A; font-size: 18px; }
-        .stream-report-card {
-            background: #F4F6F9;
-            border: 1px solid #E4E6EB;
-            border-radius: 16px;
-            padding: 18px;
-            margin-bottom: 15px;
-        }
-        .stream-report-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 12px;
-            border-bottom: 1px solid #E4E6EB;
-            padding-bottom: 8px;
-            font-size: 13px;
-            flex-wrap: wrap;
-            gap: 6px;
-        }
-        .timeline-list {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-        .timeline-item {
-            background: #FFFFFF;
-            padding: 8px 14px;
-            border-radius: 10px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border: 1px solid #E4E6EB;
-            font-size: 12px;
-        }
-
-        /* ==================== 響應式調整 ==================== */
-        @media (max-width: 1024px) {
-            body { padding: 10px 15px; }
-            .navbar { flex-direction: column; gap: 12px; padding: 15px; border-radius: 20px; }
-            .dashboard-grid { grid-template-columns: 1fr; }
-            .control-bar { flex-direction: column; align-items: stretch; }
-            .control-bar input[type="text"], .control-bar select, .control-bar button { width: 100%; }
-            .rule-form-row { flex-direction: column; align-items: stretch; }
-        }
-    </style>
-</head>
-<body>
-
-    <!-- 頂部導航列 -->
-    <div class="navbar">
-        <div class="nav-logo">
-            <span style="color: #0066FF; font-size: 20px;">✦</span> 加班台 Dashboard
-        </div>
-        <div class="nav-links">
-            <button class="nav-item active" id="navDashBtn" onclick="switchView('dash')">Dashboard</button>
-            <button class="nav-item" id="navRuleBtn" onclick="switchView('rule')">⚙️ Rule Setting</button>
-            <button class="nav-item" id="navReportBtn" onclick="switchView('report')">📈 Report</button>
-            <button class="nav-item">Chat</button>
-        </div>
-        <div class="nav-right-icons">
-            <button class="icon-btn" onclick="switchView('rule')" title="規則設定">⚙️</button>
-            <button class="icon-btn" onclick="switchView('report')" title="直播歷史報告">📈</button>
-            <button class="icon-btn primary">👤</button>
-        </div>
-    </div>
-
-    <!-- 主控台版面 -->
-    <div class="dashboard-grid" id="dashboardMainGrid">
-        <!-- 頂部控制列 -->
-        <div class="control-bar">
-            <input type="text" id="video_url" placeholder="請輸入 YouTube 直播 Link..." required>
-            <select id="duration">
-                <option value="2">2H</option>
-                <option value="2.5">2.5H</option>
-                <option value="3">3H</option>
-                <option value="3.5">3.5H</option>
-                <option value="4">4H</option>
-                <option value="4.5" selected>4.5H</option>
-            </select>
-            <button type="button" onclick="startTimer()" style="background: #0066FF; color: #FFFFFF;">🚀 Start</button>
-            <button type="button" id="pauseBtn" onclick="togglePauseTimer()" style="background: #FF9500; color: #FFFFFF; display: none;">⏸️ 暫停</button>
-            <button type="button" onclick="cutOffTimer()" style="background: #5856D6; color: #FFFFFF;">✂️ Cut Off</button>
-            <button type="button" onclick="resetTimer()" style="background: #F4F6F9; color: #1A1A1A; border: 1px solid #E4E6EB;">🔄 重設</button>
-        </div>
-
-        <!-- 左側：倒數時鐘 + 累積時間 -->
-        <div class="left-section">
-            <div class="timer-circle">
-                <span id="countdown">04:30:00</span>
-                <span style="font-size: 11px; color: #65676B; margin-top: 4px;" id="timerStateDesc">倒數狀態</span>
-            </div>
-            <div class="elapsed-text" id="elapsedBox">總直播累積：00:00:00</div>
-            <div class="status-text" id="statusBox">狀態：尚未綁定直播</div>
-        </div>
-
-        <!-- 中間：日曆與時間區 -->
-        <div class="middle-section">
-            <div class="calendar-widget-split">
-                <div class="cal-month-box">
-                    <div style="font-size: 10px; color: #65676B;">Month</div>
-                    <div class="month-name" id="current-month-year">July</div>
-                </div>
-                <div class="cal-days-right" id="calendar-days-container"></div>
-            </div>
-
-            <div class="widget-box">
-                <h4 style="margin: 0 0 8px 0; color: #1A1A1A; font-size: 14px;">🇭🇰 香港即時時間</h4>
-                <div style="font-weight: bold; color: #0066FF; font-size: 20px; letter-spacing: 1px;" id="hk-realtime">--:--:--</div>
-                <div style="font-size: 11px; color: #65676B; margin-top: 4px;" id="hk-realdate">----/--/--</div>
-            </div>
-        </div>
-
-        <!-- 右側：Super Chat 排行榜 + 總金額 -->
-        <div class="right-section">
-            <div class="right-section-header">
-                <h3>🏆 SC 排行榜</h3>
-                <div class="total-sc-badge" id="totalScBadge">總計: $HKD 0</div>
-            </div>
-            <!-- 已清空預設 $220 卡片，交由動態輸入或預設為 0 -->
-            <div id="scCardListContainer" style="display: flex; flex-direction: column; gap: 8px;">
-                <!-- 動態SC或初始佔位 -->
-            </div>
-            <div style="text-align: center; font-size: 11px; color: #65676B; margin-top: auto;">等待實時 SC 接入...</div>
-        </div>
-    </div>
-
-    <!-- Rule Setting 區塊 -->
-    <div class="rule-section-container" id="ruleSectionView">
-        <h3>⚙️ 分段條件加時規則設定 (支援階梯式條件)</h3>
-        <div class="rule-form-row">
-            <div class="rule-form-group">
-                <label>起始金額條件 (由幾多蚊開始)</label>
-                <input type="number" id="newRuleStart" value="0" placeholder="例如: 0 或 5000">
-            </div>
-            <div class="rule-form-group">
-                <label>每滿多少金額 ($HKD)</label>
-                <input type="number" id="newRuleStep" value="200" placeholder="例如: 200 或 500">
-            </div>
-            <div class="rule-form-group">
-                <label>增加時間 (小時)</label>
-                <input type="number" step="0.5" id="newRuleHours" value="1" placeholder="例如: 1">
-            </div>
-            <button type="button" class="rule-add-btn" onclick="addNewRule()">➕ 新增區段</button>
-        </div>
-        <div class="rule-list" id="ruleListContainer"></div>
-        <div style="margin-top: 20px;">
-            <button type="button" onclick="switchView('dash')" style="padding: 10px 20px; background: #1A1A1A; color: #FFFFFF; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 13px;">⬅️ 返回 Dashboard</button>
-        </div>
-    </div>
-
-    <!-- Report 區塊 -->
-    <div class="report-section-container" id="reportSectionView">
-        <div class="report-header-flex">
-            <div>
-                <h3>📈 直播歷史與 Super Chat 時間軸報告</h3>
-                <div style="font-size: 12px; color: #65676B; margin-top: 4px;">記錄每一場你輸入並開始過的直播，並按時間軸展示觀眾的課金時間、名稱與金額。</div>
-            </div>
-            <div style="display: flex; gap: 10px;">
-                <button type="button" onclick="resetReportData()" style="padding: 9px 14px; background: #F4F6F9; color: #1A1A1A; border: 1px solid #E4E6EB; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 12px;">🔄 重設 Report</button>
-                <button type="button" onclick="clearAllHistory()" style="padding: 9px 14px; background: #FF3B30; color: #FFFFFF; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 12px;">🗑️ 清空所有歷史紀錄</button>
-            </div>
-        </div>
-        
-        <!-- 歷史報告列表容器 -->
-        <div id="reportListContainer">
-            <!-- 動態生成每一場直播報告 -->
-        </div>
-
-        <div style="margin-top: 20px;">
-            <button type="button" onclick="switchView('dash')" style="padding: 10px 20px; background: #1A1A1A; color: #FFFFFF; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 13px;">⬅️ 返回 Dashboard</button>
-        </div>
-    </div>
-
-    <script>
-        let targetEndTime = null;
-        let streamStartTime = null;
+        // 定義全域變數
         let timerInterval = null;
-        let currentStreamId = null;
-        let isPaused = false;
-        let pausedRemainingMs = 0;
+        const docRef = doc(db, "streams", "current_stream"); // 固定存在雲端的同一份直播紀錄
 
-        // 預設資料或從 localStorage 載入
-        let streamHistory = JSON.parse(localStorage.getItem('streamHistory')) || [];
-        let rules = JSON.parse(localStorage.getItem('streamRules')) || [
-            { id: 1, startAmount: 0, stepAmount: 200, hours: 1 },
-            { id: 2, startAmount: 5000, stepAmount: 500, hours: 1 }
-        ];
-
-        // 初始載入時同步恢復上次輸入的 Link
-        window.addEventListener('DOMContentLoaded', () => {
-            const savedUrl = localStorage.getItem('savedVideoUrl');
-            if (savedUrl) {
-                document.getElementById('video_url').value = savedUrl;
-            }
-            renderSCards();
-            calculateTotalSC();
-            renderReportList();
+        // 頁面載入時，從雲端拉取最新資料
+        window.addEventListener('DOMContentLoaded', async () => {
+            setupRealtimeSync();
+            updateHKClockAndCalendar();
+            setInterval(updateHKClockAndCalendar, 1000);
         });
 
-        // 儲存狀態至 localStorage 防止重新整理時消失
-        function saveDataToStorage() {
-            localStorage.setItem('streamHistory', JSON.stringify(streamHistory));
-            localStorage.setItem('streamRules', JSON.stringify(rules));
-            const urlVal = document.getElementById('video_url').value;
-            localStorage.setItem('savedVideoUrl', urlVal);
-        }
+        // 實時監聽雲端資料 (即使你 F5、換電腦、過 20 日，一開網頁自動同步)
+        function setupRealtimeSync() {
+            onSnapshot(docRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    
+                    // 填入 Link
+                    if (data.videoUrl) {
+                        document.getElementById('video_url').value = data.videoUrl;
+                    }
+                    
+                    // 更新介面狀態
+                    if (data.status === "running" || data.status === "paused") {
+                        window.serverTargetEndTime = data.targetEndTime;
+                        window.serverStartTime = data.startTime;
+                        window.serverIsPaused = data.isPaused;
+                        window.serverPausedRemaining = data.pausedRemainingMs || 0;
+                        window.currentStreamId = data.streamId;
 
-        // 切換畫面
-        function switchView(viewName) {
-            const dashGrid = document.getElementById("dashboardMainGrid");
-            const ruleView = document.getElementById("ruleSectionView");
-            const reportView = document.getElementById("reportSectionView");
-            const navDash = document.getElementById("navDashBtn");
-            const navRule = document.getElementById("navRuleBtn");
-            const navReport = document.getElementById("navReportBtn");
+                        if (data.status === "running") {
+                            document.getElementById("statusBox").innerHTML = `狀態：已綁定 (${data.videoId || 'Live'})`;
+                            document.getElementById("pauseBtn").style.display = "inline-block";
+                            document.getElementById("pauseBtn").innerText = "⏸️ 暫停";
+                            document.getElementById("timerStateDesc").innerText = "雲端倒數中";
+                            if (!timerInterval) {
+                                timerInterval = setInterval(updateCountdown, 1000);
+                            }
+                        } else if (data.status === "paused") {
+                            document.getElementById("statusBox").innerHTML = `狀態：已暫停`;
+                            document.getElementById("pauseBtn").style.display = "inline-block";
+                            document.getElementById("pauseBtn").innerText = "▶️ 繼續";
+                            document.getElementById("timerStateDesc").innerText = "雲端已暫停";
+                            if (timerInterval) {
+                                clearInterval(timerInterval);
+                                timerInterval = null;
+                            }
+                            // 顯示暫停時剩餘的秒數
+                            displayPausedTime(data.pausedRemainingMs);
+                        }
+                    } else if (data.status === "cutoff" || data.status === "reset") {
+                        resetUIState();
+                        if (data.status === "cutoff") {
+                            document.getElementById("timerStateDesc").innerText = "狀態：已 Cut Off 終止";
+                        }
+                    }
 
-            dashGrid.style.display = "none";
-            ruleView.style.display = "none";
-            reportView.style.display = "none";
-            navDash.classList.remove("active");
-            navRule.classList.remove("active");
-            navReport.classList.remove("active");
-
-            if (viewName === 'rule') {
-                ruleView.style.display = "block";
-                navRule.classList.add("active");
-                renderRuleList();
-            } else if (viewName === 'report') {
-                reportView.style.display = "block";
-                navReport.classList.add("active");
-                renderReportList();
-            } else {
-                dashGrid.style.display = "grid";
-                navDash.classList.add("active");
-            }
-        }
-
-        // 重設 Report 頁面專用按鈕
-        function resetReportData() {
-            if (confirm("⚠️ 確定要重設 Report 頁面的所有顯示狀態與暫存資料嗎？")) {
-                streamHistory = [];
-                saveDataToStorage();
-                renderReportList();
-                alert("🔄 Report 頁面已成功重設！");
-            }
-        }
-
-        // 清空所有直播歷史紀錄
-        function clearAllHistory() {
-            if (confirm("⚠️ 確定要清空所有直播歷史紀錄嗎？此操作無法復原。")) {
-                streamHistory = [];
-                saveDataToStorage();
-                renderReportList();
-                alert("🗑️ 已成功清空所有直播歷史紀錄！");
-            }
-        }
-
-        // 渲染 SC 卡片（初始無預設 $220，若有當前直播則讀取，否則為空）
-        function renderSCards() {
-            const container = document.getElementById("scCardListContainer");
-            container.innerHTML = "";
-
-            let activeScs = [];
-            if (currentStreamId) {
-                let currentStream = streamHistory.find(s => s.id === currentStreamId);
-                if (currentStream && currentStream.scEvents) {
-                    activeScs = currentStream.scEvents;
+                    // 渲染 SC 榜
+                    if (data.scEvents) {
+                        renderSCards(data.scEvents);
+                    }
                 }
+            });
+        }
+
+        // 開始計時 (寫入雲端)
+        window.startTimer = async function() {
+            const videoUrl = document.getElementById("video_url").value;
+            let videoId = "";
+            if (videoUrl.includes("youtu.be/")) {
+                videoId = videoUrl.split("youtu.be/")[1].split("?")[0];
+            } else if (videoUrl.includes("watch?v=")) {
+                videoId = videoUrl.split("watch?v=")[1].split("&")[0];
             }
 
-            if (activeScs.length === 0) {
-                container.innerHTML = `<div style="background: #F4F6F9; padding: 12px; border-radius: 12px; text-align: center; color: #65676B; font-size: 12px; border: 1px solid #E4E6EB;">暫無 SC 紀錄 (輸入連結並 Start 後自動生成)</div>`;
+            if (!videoId && !videoUrl) {
+                alert("❌ 請輸入有效的 YouTube 連結！");
                 return;
             }
 
-            activeScs.forEach(sc => {
+            const hoursToAdd = parseFloat(document.getElementById("duration").value);
+            const now = Date.now();
+            const targetEndTime = now + (hoursToAdd * 60 * 60 * 1000);
+            const streamId = now;
+
+            // 模擬初始 SC 數據
+            const scEvents = [
+                { time: new Date(now).toLocaleTimeString("en-US", { timeZone: "Asia/Hong_Kong", hour12: false }), name: "系統測試 A", amount: 50 },
+                { time: new Date(now + 10000).toLocaleTimeString("en-US", { timeZone: "Asia/Hong_Kong", hour12: false }), name: "系統測試 B", amount: 100 }
+            ];
+
+            // 寫入雲端 Firestore 資料庫
+            await setDoc(docRef, {
+                videoUrl: videoUrl,
+                videoId: videoId,
+                startTime: now,
+                targetEndTime: targetEndTime,
+                status: "running",
+                isPaused: false,
+                pausedRemainingMs: 0,
+                streamId: streamId,
+                scEvents: scEvents
+            });
+
+            alert("🚀 成功啟動雲端計時！現在你可以隨時 F5、關閉網頁甚至關機，雲端時間依然持續準確。");
+        }
+
+        // 暫停/繼續
+        window.togglePauseTimer = async function() {
+            const snap = await getDoc(docRef);
+            if (!snap.exists()) return;
+            const data = snap.data();
+
+            if (!data.isPaused) {
+                // 進入暫停：計算當前剩餘毫秒數
+                const remaining = data.targetEndTime - Date.now();
+                await updateDoc(docRef, {
+                    status: "paused",
+                    isPaused: true,
+                    pausedRemainingMs: remaining > 0 ? remaining : 0
+                });
+            } else {
+                // 恢復計時：重新計算新的目標結束時間
+                const newTarget = Date.now() + data.pausedRemainingMs;
+                await updateDoc(docRef, {
+                    status: "running",
+                    isPaused: false,
+                    targetEndTime: newTarget,
+                    pausedRemainingMs: 0
+                });
+            }
+        }
+
+        // Cut Off
+        window.cutOffTimer = async function() {
+            if (confirm("✂️ 確定要執行 Cut Off 立即終止倒數嗎？")) {
+                await updateDoc(docRef, {
+                    status: "cutoff",
+                    targetEndTime: Date.now(),
+                    isPaused: false
+                });
+            }
+        }
+
+        // 重設
+        window.resetTimer = async function() {
+            if (confirm("🔄 確定要重設計時嗎？")) {
+                await setDoc(docRef, {
+                    status: "reset",
+                    videoUrl: "",
+                    targetEndTime: Date.now(),
+                    scEvents: []
+                });
+            }
+        }
+
+        function resetUIState() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+            document.getElementById("countdown").innerHTML = "04:30:00";
+            document.getElementById("timerStateDesc").innerText = "雲端待機中";
+            document.getElementById("elapsedBox").innerText = "總直播累積：00:00:00";
+            document.getElementById("statusBox").innerHTML = "狀態：未開始";
+            document.getElementById("pauseBtn").style.display = "none";
+            document.getElementById("scCardListContainer").innerHTML = `<div style="text-align: center; color: #65676B; font-size: 12px;">暫無 SC 紀錄</div>`;
+            document.getElementById("totalScBadge").innerText = "總計: $HKD 0";
+        }
+
+        function displayPausedTime(ms) {
+            if (ms < 0) ms = 0;
+            const hours = Math.floor((ms % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const minutes = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((ms % (1000 * 60)) / 1000);
+            document.getElementById("countdown").innerHTML = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+
+        // 每秒更新畫面上的倒數與累積時間
+        function updateCountdown() {
+            if (!window.serverTargetEndTime || window.serverIsPaused) return;
+
+            const now = Date.now();
+            const elapsedMs = now - window.serverStartTime;
+            
+            // 計算累積時間
+            const elHours = Math.floor((elapsedMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const elMinutes = Math.floor((elapsedMs % (1000 * 60 * 60)) / (1000 * 60));
+            const elSeconds = Math.floor((elapsedMs % (1000 * 60)) / 1000);
+            document.getElementById("elapsedBox").innerText = `總直播累積：${String(elHours).padStart(2, '0')}:${String(elMinutes).padStart(2, '0')}:${String(elSeconds).padStart(2, '0')}`;
+
+            // 計算剩餘時間
+            const distance = window.serverTargetEndTime - now;
+            const countdownElem = document.getElementById("countdown");
+
+            if (distance < 0) {
+                const elapsed = Math.abs(distance);
+                const h = Math.floor((elapsed % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                const m = Math.floor((elapsed % (1000 * 60 * 60)) / (1000 * 60));
+                const s = Math.floor((elapsed % (1000 * 60)) / 1000);
+                countdownElem.innerHTML = `+${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+            } else {
+                const h = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                const m = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+                const s = Math.floor((distance % (1000 * 60)) / 1000);
+                countdownElem.innerHTML = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+            }
+        }
+
+        function renderSCards(scEvents) {
+            const container = document.getElementById("scCardListContainer");
+            container.innerHTML = "";
+            let total = 0;
+
+            if (!scEvents || scEvents.length === 0) {
+                container.innerHTML = `<div style="text-align: center; color: #65676B; font-size: 12px;">暫無 SC 紀錄</div>`;
+                document.getElementById("totalScBadge").innerText = "總計: $HKD 0";
+                return;
+            }
+
+            scEvents.forEach(sc => {
+                total += parseFloat(sc.amount) || 0;
                 let card = document.createElement("div");
                 card.className = "sc-card";
-                card.setAttribute("data-amount", sc.amount);
                 card.innerHTML = `
                     <span class="sc-name">${sc.name}</span>
                     <span class="sc-amount">$HKD ${sc.amount}</span>
                 `;
                 container.appendChild(card);
             });
-        }
-
-        // 渲染 Report 報告清單
-        function renderReportList() {
-            const container = document.getElementById("reportListContainer");
-            container.innerHTML = "";
-
-            if (streamHistory.length === 0) {
-                container.innerHTML = `<div style="text-align: center; color: #65676B; padding: 30px; background: #F4F6F9; border-radius: 16px;">暫時未有任何直播歷史記錄，請先於 Dashboard 輸入直播 Link 並按 Start 開始。</div>`;
-                return;
-            }
-
-            streamHistory.forEach((stream, index) => {
-                let card = document.createElement("div");
-                card.className = "stream-report-card";
-                
-                let timelineHtml = "";
-                if (stream.scEvents && stream.scEvents.length > 0) {
-                    stream.scEvents.forEach(sc => {
-                        timelineHtml += `
-                            <div class="timeline-item">
-                                <div><span style="color: #65676B; font-weight: bold; margin-right: 10px;">[${sc.time}]</span> <strong>${sc.name}</strong></div>
-                                <div style="color: #0066FF; font-weight: bold;">$HKD ${sc.amount}</div>
-                            </div>
-                        `;
-                    });
-                } else {
-                    timelineHtml = `<div style="font-size: 12px; color: #65676B; text-align: center; padding: 5px;">此場直播暫無紀錄到 SC 課金數據</div>`;
-                }
-
-                card.innerHTML = `
-                    <div class="stream-report-header">
-                        <div><strong>直播 #${streamHistory.length - index}</strong> ｜ 連結代號：<span style="color: #0066FF;">${stream.videoId}</span></div>
-                        <div>開始時間：${stream.startTimeStr} ｜ 總額：<strong>$HKD ${stream.totalAmount}</strong></div>
-                    </div>
-                    <div class="timeline-list">
-                        ${timelineHtml}
-                    </div>
-                `;
-                container.appendChild(card);
-            });
-        }
-
-        // 渲染 Rule 清單
-        function renderRuleList() {
-            const container = document.getElementById("ruleListContainer");
-            container.innerHTML = "";
-
-            if (rules.length === 0) {
-                container.innerHTML = `<div style="text-align: center; color: #65676B; padding: 20px;">暫時未有任何加時規則，請於上方新增。</div>`;
-                return;
-            }
-
-            rules.sort((a, b) => a.startAmount - b.startAmount);
-
-            rules.forEach((rule, index) => {
-                let item = document.createElement("div");
-                item.className = "rule-item-card";
-                item.innerHTML = `
-                    <div class="rule-item-info">
-                        <strong>階段 #${index + 1}：</strong> 當累積滿 <strong>$HKD ${rule.startAmount}</strong> 後，每滿 <strong>$HKD ${rule.stepAmount}</strong> 自動加時 <strong>${rule.hours}</strong> 小時
-                    </div>
-                    <button class="rule-delete-btn" onclick="deleteRule(${rule.id})">刪除</button>
-                `;
-                container.appendChild(item);
-            });
-        }
-
-        function addNewRule() {
-            const startAmount = parseFloat(document.getElementById("newRuleStart").value);
-            const stepAmount = parseFloat(document.getElementById("newRuleStep").value);
-            const hours = parseFloat(document.getElementById("newRuleHours").value);
-
-            if (isNaN(startAmount) || startAmount < 0) {
-                alert("❌ 請輸入有效的起始金額！");
-                return;
-            }
-            if (!stepAmount || stepAmount <= 0 || isNaN(stepAmount)) {
-                alert("❌ 請輸入有效的每滿金額！");
-                return;
-            }
-            if (!hours || hours <= 0 || isNaN(hours)) {
-                alert("❌ 請輸入有效的小時數！");
-                return;
-            }
-
-            const newRule = {
-                id: Date.now(),
-                startAmount: startAmount,
-                stepAmount: stepAmount,
-                hours: hours
-            };
-
-            rules.push(newRule);
-            saveDataToStorage();
-            renderRuleList();
-            alert("✅ 成功新增條件加時區段！");
-            checkAndApplyRules();
-        }
-
-        function deleteRule(id) {
-            rules = rules.filter(r => r.id !== id);
-            saveDataToStorage();
-            renderRuleList();
-            checkAndApplyRules();
-        }
-
-        function calculateTotalSC() {
-            const amountElements = document.querySelectorAll('.sc-card');
-            let total = 0;
-            amountElements.forEach(card => {
-                const amt = parseFloat(card.getAttribute('data-amount')) || 0;
-                total += amt;
-            });
             document.getElementById("totalScBadge").innerText = `總計: $HKD ${total}`;
-            
-            if (currentStreamId) {
-                let currentStream = streamHistory.find(s => s.id === currentStreamId);
-                if (currentStream) {
-                    currentStream.totalAmount = total;
-                }
-            }
-            return total;
-        }
-
-        function checkAndApplyRules() {
-            if (!targetEndTime) return;
-
-            const totalSC = calculateTotalSC();
-            
-            rules.sort((a, b) => a.startAmount - b.startAmount);
-
-            let totalExpectedHours = 0;
-            let previousThreshold = 0;
-
-            for (let i = 0; i < rules.length; i++) {
-                let currentRule = rules[i];
-                let nextStart = (i < rules.length - 1) ? rules[i + 1].startAmount : Infinity;
-
-                if (totalSC > currentRule.startAmount) {
-                    let effectiveStart = Math.max(currentRule.startAmount, previousThreshold);
-                    let effectiveEnd = Math.min(totalSC, nextStart);
-
-                    if (effectiveEnd > effectiveStart) {
-                        let amountInThisTier = effectiveEnd - effectiveStart;
-                        let times = Math.floor(amountInThisTier / currentRule.stepAmount);
-                        totalExpectedHours += (times * currentRule.hours);
-                    }
-                }
-                previousThreshold = nextStart;
-            }
-
-            if (window.appliedTotalHours === undefined) {
-                window.appliedTotalHours = 0;
-            }
-
-            if (totalExpectedHours > window.appliedTotalHours) {
-                let diffHours = totalExpectedHours - window.appliedTotalHours;
-                targetEndTime += (diffHours * 60 * 60 * 1000);
-                window.appliedTotalHours = totalExpectedHours;
-                alert(`🎉 總 SC 金額達到 $HKD ${totalSC}！符合條件加時規則，已自動為你加時 ${diffHours} 小時！`);
-            }
         }
 
         function updateHKClockAndCalendar() {
@@ -861,171 +289,140 @@
                 }
             }
         }
-
-        setInterval(updateHKClockAndCalendar, 1000);
-        updateHKClockAndCalendar();
-
-        function startTimer() {
-            const videoUrl = document.getElementById("video_url").value;
-            const statusBox = document.getElementById("statusBox");
-            
-            let videoId = "";
-            if (videoUrl.includes("youtu.be/")) {
-                videoId = videoUrl.split("youtu.be/")[1].split("?")[0];
-            } else if (videoUrl.includes("watch?v=")) {
-                videoId = videoUrl.split("watch?v=")[1].split("&")[0];
-            }
-
-            if (videoId) {
-                statusBox.innerHTML = `狀態：已綁定 (${videoId})`;
-            } else {
-                statusBox.innerHTML = `狀態：❌ 連結格式錯誤`;
-                return;
-            }
-
-            const hoursToAdd = parseFloat(document.getElementById("duration").value);
-            const now = new Date().getTime();
-            streamStartTime = now; 
-            targetEndTime = now + (hoursToAdd * 60 * 60 * 1000);
-            isPaused = false;
-            
-            window.appliedTotalHours = 0;
-            currentStreamId = Date.now();
-
-            // 模擬生成幾筆 SC 數據作為演示
-            let scEvents = [
-                { time: new Date(now).toLocaleTimeString("en-US", { timeZone: "Asia/Hong_Kong", hour12: false }), name: "1. A", amount: "50" },
-                { time: new Date(now + 30000).toLocaleTimeString("en-US", { timeZone: "Asia/Hong_Kong", hour12: false }), name: "2. B", amount: "100" }
-            ];
-
-            let newStreamRecord = {
-                id: currentStreamId,
-                videoId: videoId,
-                startTimeStr: new Date(now).toLocaleString("en-US", { timeZone: "Asia/Hong_Kong" }),
-                totalAmount: 150,
-                scEvents: scEvents
-            };
-
-            streamHistory.unshift(newStreamRecord);
-            saveDataToStorage();
-
-            renderSCards();
-            calculateTotalSC();
-            renderReportList();
-
-            document.getElementById("pauseBtn").style.display = "inline-block";
-            document.getElementById("pauseBtn").innerText = "⏸️ 暫停";
-            document.getElementById("timerStateDesc").innerText = "倒數狀態";
-
-            if (!timerInterval) {
-                timerInterval = setInterval(updateCountdown, 1000);
-            }
-            checkAndApplyRules();
-            updateCountdown();
-        }
-
-        // 2. 暫停 / 繼續倒數制
-        function togglePauseTimer() {
-            if (!targetEndTime && !isPaused) return;
-
-            const pauseBtn = document.getElementById("pauseBtn");
-            const timerStateDesc = document.getElementById("timerStateDesc");
-
-            if (!isPaused) {
-                // 進入暫停
-                pausedRemainingMs = targetEndTime - new Date().getTime();
-                isPaused = true;
-                if (timerInterval) {
-                    clearInterval(timerInterval);
-                    timerInterval = null;
-                }
-                pauseBtn.innerText = "▶️ 繼續";
-                pauseBtn.style.background = "#34C759";
-                timerStateDesc.innerText = "狀態：已暫停";
-            } else {
-                // 恢復倒數
-                targetEndTime = new Date().getTime() + pausedRemainingMs;
-                isPaused = false;
-                timerInterval = setInterval(updateCountdown, 1000);
-                pauseBtn.innerText = "⏸️ 暫停";
-                pauseBtn.style.background = "#FF9500";
-                timerStateDesc.innerText = "倒數狀態";
-            }
-        }
-
-        // 3. Cut Off 制 (直接將倒數歸零或結束當前倒數計時)
-        function cutOffTimer() {
-            if (!targetEndTime && !isPaused) {
-                alert("⚠️ 目前並無正在進行中的倒數計時！");
-                return;
-            }
-            if (confirm("✂️ 確定要執行 Cut Off 立即終止並歸零倒數嗎？")) {
-                targetEndTime = new Date().getTime(); // 設為當前時間即歸零
-                isPaused = false;
-                if (timerInterval) {
-                    clearInterval(timerInterval);
-                    timerInterval = null;
-                }
-                document.getElementById("countdown").innerHTML = "00:00:00";
-                document.getElementById("timerStateDesc").innerText = "狀態：已 Cut Off 終止";
-                document.getElementById("pauseBtn").style.display = "none";
-                alert("✂️ 已成功執行 Cut Off！");
-            }
-        }
-
-        function updateCountdown() {
-            if (!targetEndTime || isPaused) return;
-
-            const now = new Date().getTime();
-            
-            const elapsedMs = now - streamStartTime;
-            const elHours = Math.floor((elapsedMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-            const elMinutes = Math.floor((elapsedMs % (1000 * 60 * 60)) / (1000 * 60));
-            const elSeconds = Math.floor((elapsedMs % (1000 * 60)) / 1000);
-            document.getElementById("elapsedBox").innerText = `總直播累積：${String(elHours).padStart(2, '0')}:${String(elMinutes).padStart(2, '0')}:${String(elSeconds).padStart(2, '0')}`;
-
-            checkAndApplyRules();
-
-            const distance = targetEndTime - now;
-            const countdownElem = document.getElementById("countdown");
-
-            if (distance < 0) {
-                const elapsed = Math.abs(distance);
-                const hours = Math.floor((elapsed % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-                const minutes = Math.floor((elapsed % (1000 * 60 * 60)) / (1000 * 60));
-                const seconds = Math.floor((elapsed % (1000 * 60)) / 1000);
-                countdownElem.innerHTML = `+${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-            } else {
-                const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-                const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-                const seconds = Math.floor((distance % (1000 * 60)) / 1000);
-                countdownElem.innerHTML = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-            }
-        }
-
-        function resetTimer() {
-            targetEndTime = null;
-            streamStartTime = null;
-            currentStreamId = null;
-            isPaused = false;
-            window.appliedTotalHours = 0;
-            if (timerInterval) {
-                clearInterval(timerInterval);
-                timerInterval = null;
-            }
-            document.getElementById("countdown").innerHTML = "04:30:00";
-            document.getElementById("timerStateDesc").innerText = "倒數狀態";
-            document.getElementById("elapsedBox").innerText = "總直播累積：00:00:00";
-            document.getElementById("statusBox").innerHTML = "狀態：已重設";
-            document.getElementById("pauseBtn").style.display = "none";
-            renderSCards();
-            calculateTotalSC();
-        }
-
-        // 監聽 input 變動即時儲存 Link 避免refreash不見
-        document.getElementById('video_url').addEventListener('input', function() {
-            saveDataToStorage();
-        });
     </script>
+    <style>
+        * { box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+            background: #F4F6F9; color: #1A1A1A; margin: 0; padding: 20px 40px; 
+            display: flex; flex-direction: column; align-items: center; min-height: 100vh;
+        }
+        .navbar {
+            width: 100%; max-width: 1200px; display: flex; justify-content: space-between; align-items: center;
+            background: #FFFFFF; padding: 12px 25px; border-radius: 50px; box-shadow: 0 4px 20px rgba(0,0,0,0.03); margin-bottom: 30px;
+        }
+        .nav-logo { font-weight: bold; font-size: 18px; color: #1A1A1A; display: flex; align-items: center; gap: 8px; }
+        .dashboard-grid { width: 100%; max-width: 1200px; display: grid; grid-template-columns: 360px 320px 450px; gap: 25px; }
+        .control-bar {
+            grid-column: 1 / -1; background: #FFFFFF; padding: 15px 25px; border-radius: 20px;
+            display: flex; gap: 15px; align-items: center; box-shadow: 0 4px 20px rgba(0,0,0,0.03); border: 1px solid #E4E6EB; flex-wrap: wrap;
+        }
+        .control-bar input, .control-bar select {
+            padding: 10px 15px; border-radius: 10px; border: 1px solid #E4E6EB; background: #F4F6F9; color: #1A1A1A; font-size: 13px; outline: none;
+        }
+        .control-bar input[type="text"] { flex: 2; min-width: 200px; }
+        .control-bar select { flex: 1; }
+        .control-bar button { padding: 10px 16px; border-radius: 10px; border: none; font-weight: bold; cursor: pointer; font-size: 13px; }
+        .left-section {
+            background: #FFFFFF; border-radius: 24px; padding: 30px; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; box-shadow: 0 4px 20px rgba(0,0,0,0.03); border: 1px solid #E4E6EB; text-align: center;
+        }
+        .timer-circle {
+            width: 220px; height: 220px; border-radius: 50%; border: 8px solid #1A1A1A;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; background: #FFFFFF;
+            box-shadow: inset 0 5px 15px rgba(0,0,0,0.05); margin-bottom: 15px;
+        }
+        .timer-circle span { font-size: 26px; color: #1A1A1A; font-weight: bold; letter-spacing: 1px; }
+        .status-text { font-size: 13px; color: #65676B; margin-top: 5px; }
+        .elapsed-text { font-size: 12px; color: #0066FF; font-weight: bold; margin-top: 8px; }
+        .middle-section { display: flex; flex-direction: column; gap: 20px; }
+        .calendar-widget-split {
+            background: #FFFFFF; padding: 15px; border-radius: 20px; border: 1px solid #E4E6EB;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.03); display: flex; align-items: center; gap: 12px;
+        }
+        .cal-month-box { background: #F4F6F9; padding: 15px 12px; border-radius: 14px; text-align: center; min-width: 90px; border: 1px solid #E4E6EB; }
+        .cal-month-box .month-name { font-size: 14px; font-weight: bold; color: #1A1A1A; margin-top: 2px; }
+        .cal-days-right { display: flex; gap: 5px; justify-content: space-between; flex-grow: 1; }
+        .cal-day-item {
+            text-align: center; padding: 8px 4px; border-radius: 12px; font-size: 10px; color: #65676B;
+            background: #F4F6F9; flex: 1; border: 1px solid #E4E6EB;
+        }
+        .cal-day-item.active { background: #1A1A1A; color: #FFFFFF; font-weight: bold; border-color: #1A1A1A; }
+        .cal-day-item .day-num { font-size: 13px; font-weight: bold; color: #1A1A1A; margin-top: 3px; }
+        .cal-day-item.active .day-num { color: #FFFFFF; }
+        .widget-box { background: #FFFFFF; padding: 22px; border-radius: 20px; border: 1px solid #E4E6EB; box-shadow: 0 4px 20px rgba(0,0,0,0.03); text-align: center; }
+        .right-section {
+            background: #FFFFFF; border-radius: 24px; padding: 22px; border: 1px solid #E4E6EB;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.03); display: flex; flex-direction: column; gap: 12px;
+        }
+        .right-section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+        .right-section h3 { margin: 0; color: #1A1A1A; font-size: 15px; }
+        .total-sc-badge { background: #E8F0FE; color: #0066FF; font-size: 11px; font-weight: bold; padding: 4px 8px; border-radius: 8px; }
+        .sc-card {
+            background: #F4F6F9; padding: 14px 18px; border-radius: 14px; display: flex; justify-content: space-between;
+            align-items: center; border-left: 5px solid #0066FF; border: 1px solid #E4E6EB;
+        }
+        .sc-name { font-weight: bold; font-size: 13px; color: #1A1A1A; }
+        .sc-amount { color: #0066FF; font-weight: bold; font-size: 13px; }
+    </style>
+</head>
+<body>
+
+    <div class="navbar">
+        <div class="nav-logo">
+            <span style="color: #0066FF; font-size: 20px;">✦</span> 雲端加班台 Dashboard
+        </div>
+        <div style="font-size: 12px; color: #65676B;">🔥 雲端同步模式：支援 20 日超長續航、F5 零丟失</div>
+    </div>
+
+    <div class="dashboard-grid">
+        <!-- 頂部控制列 -->
+        <div class="control-bar">
+            <input type="text" id="video_url" placeholder="請輸入 YouTube 直播 Link..." required>
+            <select id="duration">
+                <option value="2">2H</option>
+                <option value="2.5">2.5H</option>
+                <option value="3">3H</option>
+                <option value="3.5">3.5H</option>
+                <option value="4">4H</option>
+                <option value="4.5" selected>4.5H</option>
+                <option value="480">480H (20日測試)</option>
+            </select>
+            <button type="button" onclick="startTimer()" style="background: #0066FF; color: #FFFFFF;">🚀 Start</button>
+            <button type="button" id="pauseBtn" onclick="togglePauseTimer()" style="background: #FF9500; color: #FFFFFF; display: none;">⏸️ 暫停</button>
+            <button type="button" onclick="cutOffTimer()" style="background: #5856D6; color: #FFFFFF;">✂️ Cut Off</button>
+            <button type="button" onclick="resetTimer()" style="background: #F4F6F9; color: #1A1A1A; border: 1px solid #E4E6EB;">🔄 重設</button>
+        </div>
+
+        <!-- 左側：倒數時鐘 -->
+        <div class="left-section">
+            <div class="timer-circle">
+                <span id="countdown">04:30:00</span>
+                <span style="font-size: 11px; color: #65676B; margin-top: 4px;" id="timerStateDesc">雲端待機中</span>
+            </div>
+            <div class="elapsed-text" id="elapsedBox">總直播累積：00:00:00</div>
+            <div class="status-text" id="statusBox">狀態：未開始</div>
+        </div>
+
+        <!-- 中間：日曆與時間 -->
+        <div class="middle-section">
+            <div class="calendar-widget-split">
+                <div class="cal-month-box">
+                    <div style="font-size: 10px; color: #65676B;">Month</div>
+                    <div class="month-name" id="current-month-year">July</div>
+                </div>
+                <div class="cal-days-right" id="calendar-days-container"></div>
+            </div>
+
+            <div class="widget-box">
+                <h4 style="margin: 0 0 8px 0; color: #1A1A1A; font-size: 14px;">🇭🇰 香港即時時間</h4>
+                <div style="font-weight: bold; color: #0066FF; font-size: 20px; letter-spacing: 1px;" id="hk-realtime">--:--:--</div>
+                <div style="font-size: 11px; color: #65676B; margin-top: 4px;" id="hk-realdate">----/--/--</div>
+            </div>
+        </div>
+
+        <!-- 右側：SC 排行榜 -->
+        <div class="right-section">
+            <div class="right-section-header">
+                <h3>🏆 雲端 SC 排行榜</h3>
+                <div class="total-sc-badge" id="totalScBadge">總計: $HKD 0</div>
+            </div>
+            <div id="scCardListContainer" style="display: flex; flex-direction: column; gap: 8px;">
+                <div style="text-align: center; color: #65676B; font-size: 12px; padding: 20px;">暫無 SC 紀錄</div>
+            </div>
+            <div style="text-align: center; font-size: 11px; color: #65676B; margin-top: auto;">連線狀態：雲端實時同步中 🟢</div>
+        </div>
+    </div>
+
 </body>
 </html>
