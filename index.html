@@ -80,10 +80,10 @@
             });
         }
 
-        // 取得 YouTube 標題與封面 (解決入link勾唔到資訊問題)
+        // 取得 YouTube 標題與封面
         async function fetchYouTubeInfo(videoUrl, videoId) {
             let title = "YouTube 直播節目";
-            let thumbnail = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`; // 標準高清封面備用
+            let thumbnail = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
 
             try {
                 const response = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(videoUrl)}&format=json`);
@@ -98,7 +98,7 @@
             return { title, thumbnail };
         }
 
-        // 開始計時 (含未 Cut Off 禁止換 Link 防護)
+        // 開始計時
         async function startTimer() {
             const snap = await getDoc(docRef);
             if (snap.exists()) {
@@ -178,9 +178,9 @@
             }
         }
 
-        // Cut Off 埋數：停止課金計算，倒數繼續，自動寫入 record
+        // Cut Off 埋數：寫入 record 並停止課金計算
         async function cutOffTimer() {
-            if (confirm("✂️ 確定要進行「直播埋數」嗎？埋數後將停止課金計算並封存記錄，倒數時鐘會繼續運行。")) {
+            if (confirm("✂️ 確定要進行「直播埋數」嗎？埋數後將停止課金計算並封存記錄。")) {
                 const snap = await getDoc(docRef);
                 if (snap.exists()) {
                     const data = snap.data();
@@ -253,6 +253,7 @@
             document.getElementById("countdown").innerHTML = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
         }
 
+        // 倒數計時（歸零後直接停止在 00:00:00）
         function updateCountdown() {
             if (!window.serverTargetEndTime || window.serverIsPaused) return;
 
@@ -267,12 +268,8 @@
             const distance = window.serverTargetEndTime - now;
             const countdownElem = document.getElementById("countdown");
 
-            if (distance < 0) {
-                const elapsed = Math.abs(distance);
-                const h = Math.floor((elapsed % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-                const m = Math.floor((elapsed % (1000 * 60 * 60)) / (1000 * 60));
-                const s = Math.floor((elapsed % (1000 * 60)) / 1000);
-                countdownElem.innerHTML = `+${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+            if (distance <= 0) {
+                countdownElem.innerHTML = "00:00:00";
             } else {
                 const h = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
                 const m = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
@@ -305,7 +302,7 @@
             document.getElementById("totalScBadge").innerText = `總計: $HKD ${total}`;
         }
 
-        // 讀取並渲染 Record 頁面（封面+標題卡片，下方為SC詳細列表，最新在上）
+        // 讀取並渲染 Record 頁面
         async function loadHistoryRecords() {
             const container = document.getElementById("recordContainerList");
             if (!container) return;
@@ -388,7 +385,7 @@
                 tabRecordBtn.style.color = "#FFFFFF";
                 tabDashboardBtn.style.background = "#F4F6F9";
                 tabDashboardBtn.style.color = "#1A1A1A";
-                loadHistoryRecords(); // 切過去時自動重新整理列表
+                loadHistoryRecords();
             }
         }
 
@@ -580,11 +577,11 @@
         </div>
     </div>
 
-    <!-- 📋 歷史 Record 列表頁面 (封面+標題卡片，下方SC明細) -->
+    <!-- 📋 歷史 Record 列表頁面 -->
     <div class="record-container" id="recordView">
         <h2 style="margin: 0 0 10px 0; font-size: 18px; color: #1A1A1A;">📋 歷史直播 Record 列表</h2>
         <div id="recordContainerList" style="display: flex; flex-direction: column; gap: 15px;">
-            <!-- 動態生成的每一場直播卡片 (最新在上) -->
+            <!-- 動態生成的每一場直播卡片 -->
         </div>
     </div>
 
