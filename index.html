@@ -6,7 +6,7 @@
     <!-- 引入 Firebase SDK (v10 模組化版本) -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         // ==========================================
         // Firebase 設定配置
@@ -89,8 +89,18 @@
             });
         }
 
-        // 開始計時 (寫入雲端)
+        // 開始計時 (寫入雲端，並加入「未 Cut Off 禁止換 Link」防護)
         async function startTimer() {
+            const snap = await getDoc(docRef);
+            if (snap.exists()) {
+                const currentData = snap.data();
+                // 檢查是否正在進行中（running 或 paused）
+                if (currentData.status === "running" || currentData.status === "paused") {
+                    alert("❌ 當前直播尚未 Cut Off 終止，禁止直接更換連結！請先點擊「✂️ Cut Off」結束本場直播，才可以開始新直播。");
+                    return;
+                }
+            }
+
             const videoUrl = document.getElementById("video_url").value;
             let videoId = "";
             if (videoUrl.includes("youtu.be/")) {
@@ -128,7 +138,7 @@
                 scEvents: scEvents
             });
 
-            alert("🚀 成功啟動雲端計時！現在你可以隨時 F5、關閉網頁甚至關機，雲端時間依然持續準確。");
+            alert("🚀 成功啟動雲端計時！");
         }
 
         // 暫停/繼續
@@ -138,7 +148,6 @@
             const data = snap.data();
 
             if (!data.isPaused) {
-                // 進入暫停：計算當前剩餘毫秒數
                 const remaining = data.targetEndTime - Date.now();
                 await updateDoc(docRef, {
                     status: "paused",
@@ -146,7 +155,6 @@
                     pausedRemainingMs: remaining > 0 ? remaining : 0
                 });
             } else {
-                // 恢復計時：重新計算新的目標結束時間
                 const newTarget = Date.now() + data.pausedRemainingMs;
                 await updateDoc(docRef, {
                     status: "running",
@@ -157,9 +165,42 @@
             }
         }
 
-        // Cut Off
+        // Cut Off（自動封存並寫入歷史記錄到 Firebase）
         async function cutOffTimer() {
-            if (confirm("✂️ 確定要執行 Cut Off 立即終止倒數嗎？")) {
+            if (confirm("✂️ 確定要執行 Cut Off 立即終止倒數，並將數據存入 Record 嗎？")) {
+                const snap = await getDoc(docRef);
+                if (snap.exists()) {
+                    const data = snap.data();
+                    const now = Date.now();
+                    const elapsedMs = data.startTime ? (now - data.startTime) : 0;
+                    
+                    // 計算總累積時間字串
+                    const elHours = Math.floor((elapsedMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                    const elMinutes = Math.floor((elapsedMs % (1000 * 60 * 60)) / (1000 * 60));
+                    const elSeconds = Math.floor((elapsedMs % (1000 * 60)) / 1000);
+                    const totalElapsedStr = `${String(elHours).padStart(2, '0')}:${String(elMinutes).padStart(2, '0')}:${String(elSeconds).padStart(2, '0')}`;
+
+                    // 計算 SC 總額
+                    let totalSc = 0;
+                    if (data.scEvents) {
+                        data.scEvents.forEach(sc => { totalSc += parseFloat(sc.amount) || 0; });
+                    }
+
+                    // 寫入到 Firebase 的 history 集合中供 record 頁面讀取
+                    try {
+                        await addDoc(collection(db, "history"), {
+                            videoUrl: data.videoUrl || "",
+                            videoId: data.videoId || "Unknown",
+                            totalElapsed: totalElapsedStr,
+                            totalScAmount: totalSc,
+                            cutoffTime: new Date().toLocaleString("en-US", { timeZone: "Asia/Hong_Kong" }),
+                            scCount: data.scEvents ? data.scEvents.length : 0
+                        });
+                    } catch (e) {
+                        console.error("寫入歷史記錄失敗: ", e);
+                    }
+                }
+
                 await updateDoc(docRef, {
                     status: "cutoff",
                     targetEndTime: Date.now(),
