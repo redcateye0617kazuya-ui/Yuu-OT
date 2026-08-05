@@ -109,10 +109,7 @@
             const streamId = now;
 
             // 模擬初始 SC 數據
-            const scEvents = [
-                { time: new Date(now).toLocaleTimeString("en-US", { timeZone: "Asia/Hong_Kong", hour12: false }), name: "系統測試 A", amount: 50 },
-                { time: new Date(now + 10000).toLocaleTimeString("en-US", { timeZone: "Asia/Hong_Kong", hour12: false }), name: "系統測試 B", amount: 100 }
-            ];
+            const scEvents = [];
 
             // 寫入雲端 Firestore 資料庫
             await setDoc(docRef, {
