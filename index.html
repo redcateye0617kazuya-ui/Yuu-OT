@@ -9,16 +9,15 @@
         import { getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         // ==========================================
-        // 請將下面這裡換成你自己的 Firebase 設定配置
+        // Firebase 設定配置
         // ==========================================
         const firebaseConfig = {
-             apiKey: "AIzaSyCO1i0d_c7EO4jonhTx7ylib2-xAEbLa5M",
-  authDomain: "overtime-dashboard.firebaseapp.com",
-  projectId: "overtime-dashboard",
-  storageBucket: "overtime-dashboard.firebasestorage.app",
-  messagingSenderId: "442932326873",
-  appId: "1:442932326873:web:18a57cdfc48d31b62369c8"
-
+            apiKey: "AIzaSyCO1i0d_c7EO4jonhTx7ylib2-xAEbLa5M",
+            authDomain: "overtime-dashboard.firebaseapp.com",
+            projectId: "overtime-dashboard",
+            storageBucket: "overtime-dashboard.firebasestorage.app",
+            messagingSenderId: "442932326873",
+            appId: "1:442932326873:web:18a57cdfc48d31b62369c8"
         };
 
         // 初始化 Firebase
@@ -36,7 +35,7 @@
             setInterval(updateHKClockAndCalendar, 1000);
         });
 
-        // 實時監聽雲端資料 (即使你 F5、換電腦、過 20 日，一開網頁自動同步)
+        // 實時監聽雲端資料 (確保 F5、開關網頁實時同步)
         function setupRealtimeSync() {
             onSnapshot(docRef, (docSnap) => {
                 if (docSnap.exists()) {
@@ -72,7 +71,6 @@
                                 clearInterval(timerInterval);
                                 timerInterval = null;
                             }
-                            // 顯示暫停時剩餘的秒數
                             displayPausedTime(data.pausedRemainingMs);
                         }
                     } else if (data.status === "cutoff" || data.status === "reset") {
@@ -91,7 +89,7 @@
         }
 
         // 開始計時 (寫入雲端)
-        window.startTimer = async function() {
+        async function startTimer() {
             const videoUrl = document.getElementById("video_url").value;
             let videoId = "";
             if (videoUrl.includes("youtu.be/")) {
@@ -133,7 +131,7 @@
         }
 
         // 暫停/繼續
-        window.togglePauseTimer = async function() {
+        async function togglePauseTimer() {
             const snap = await getDoc(docRef);
             if (!snap.exists()) return;
             const data = snap.data();
@@ -159,7 +157,7 @@
         }
 
         // Cut Off
-        window.cutOffTimer = async function() {
+        async function cutOffTimer() {
             if (confirm("✂️ 確定要執行 Cut Off 立即終止倒數嗎？")) {
                 await updateDoc(docRef, {
                     status: "cutoff",
@@ -170,7 +168,7 @@
         }
 
         // 重設
-        window.resetTimer = async function() {
+        async function resetTimer() {
             if (confirm("🔄 確定要重設計時嗎？")) {
                 await setDoc(docRef, {
                     status: "reset",
@@ -290,6 +288,14 @@
                 }
             }
         }
+
+        // ==========================================
+        // 關鍵：將所有函數手動掛載到 window，令按鈕 onclick 生效
+        // ==========================================
+        window.startTimer = startTimer;
+        window.togglePauseTimer = togglePauseTimer;
+        window.cutOffTimer = cutOffTimer;
+        window.resetTimer = resetTimer;
     </script>
     <style>
         * { box-sizing: border-box; }
