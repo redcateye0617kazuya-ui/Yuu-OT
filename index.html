@@ -25,7 +25,7 @@
         const db = getFirestore(app);
 
         let timerInterval = null;
-        let scPollInterval = null; // YouTube API 輪詢計時器
+        let scPollInterval = null;
         const docRef = doc(db, "streams", "current_stream");
 
         window.addEventListener('DOMContentLoaded', async () => {
@@ -61,7 +61,6 @@
                             document.getElementById("timerStateDesc").innerText = "雲端倒數中";
                             if (!timerInterval) timerInterval = setInterval(updateCountdown, 1000);
                             
-                            // 若是 running 且有 liveChatId，啟動背景實時抓取 SC
                             if (data.liveChatId && data.ytApiKey && !scPollInterval) {
                                 startScPolling(data.liveChatId, data.ytApiKey);
                             }
@@ -97,9 +96,10 @@
             let thumbnail = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
 
             try {
-                const response = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(videoUrl)}&format=json`);
-                if (response.ok) {
-                    const info = await response.json();
+                const response = `https://www.youtube.com/oembed?url=${encodeURIComponent(videoUrl)}&format=json`;
+                const res = await fetch(response);
+                if (res.ok) {
+                    const info = await res.json();
                     if (info.title) title = info.title;
                     if (info.thumbnail_url) thumbnail = info.thumbnail_url;
                 }
@@ -109,16 +109,32 @@
             return { title, thumbnail };
         }
 
-        // 透過 YouTube API 取得直播的 liveChatId
+        // 透過 YouTube API 取得直播的 liveChatId（已加入詳細除錯訊息）
         async function fetchLiveChatId(videoId, apiKey) {
             try {
-                const res = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails&id=${videoId}&key=${apiKey}`);
+                const url = `https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails&id=${videoId}&key=${apiKey}`;
+                console.log("正在請求 YouTube API:", url);
+                
+                const res = await fetch(url);
                 const data = await res.json();
+                
+                console.log("YouTube API 回應資料:", data);
+
+                if (data.error) {
+                    console.error("YouTube API 發生錯誤:", data.error.message);
+                    alert("⚠️ YouTube API 錯誤: " + data.error.message);
+                    return null;
+                }
+
                 if (data.items && data.items.length > 0) {
-                    return data.items[0].liveStreamingDetails?.activeLiveChatId || null;
+                    const chatId = data.items[0].liveStreamingDetails?.activeLiveChatId;
+                    if (!chatId) {
+                        console.warn("此影片沒有 activeLiveChatId，可能並非直播，或直播已結束/未啟用聊天室。");
+                    }
+                    return chatId || null;
                 }
             } catch (e) {
-                console.error("獲取 liveChatId 失敗:", e);
+                console.error("獲取 liveChatId 網絡異常:", e);
             }
             return null;
         }
@@ -151,15 +167,13 @@
                         let currentData = snap.data();
                         let existingEvents = currentData.scEvents || [];
                         
-                        // 建立已有 ID 集合避免重複
                         const existingIds = new Set(existingEvents.map(e => e.id));
 
                         data.items.forEach(item => {
-                            // 檢查是否為 SuperChat 事件 (superChatEvent)
                             if (item.snippet.type === 'superChatEvent') {
                                 const scDetails = item.snippet.superChatEvent;
                                 const author = item.authorDetails.displayName;
-                                const amountFormatted = scDetails.amountDisplayString; // 例如 "$100.00" 或 "HK$50.00"
+                                const amountFormatted = scDetails.amountDisplayString;
                                 const rawAmount = scDetails.amountMicros ? (scDetails.amountMicros / 1000000) : 0;
                                 const eventId = item.id;
 
@@ -184,7 +198,6 @@
                 }
             }
 
-            // 立即執行一次，之後每 10 秒抓取一次
             poll();
             scPollInterval = setInterval(poll, 10000);
         }
@@ -216,7 +229,7 @@
             }
 
             if (!apiKey) {
-                alert("⚠️ 請先輸入你的 YouTube Data API Key，否則無法實時讀取真實 Super Chat！");
+                alert("⚠️ 請先輸入你的 YouTube Data API Key！");
                 return;
             }
 
@@ -224,7 +237,7 @@
             const liveChatId = await fetchLiveChatId(videoId, apiKey);
 
             if (!liveChatId) {
-                alert("⚠️ 警告：無法獲取該直播的 LiveChatId（可能是直播尚未開始、已結束、或未開啟聊天室/API Key權限不足）。系統將正常計時，但暫無法聯動 SC。");
+                alert("⚠️ 警告：無法獲取該直播的 LiveChatId。請確保輸入的是正在進行中的 YouTube 直播連結，且你的 API Key 有效。");
             }
 
             const hoursToAdd = parseFloat(document.getElementById("duration").value);
@@ -245,10 +258,10 @@
                 isPaused: false,
                 pausedRemainingMs: 0,
                 streamId: streamId,
-                scEvents: [] // 初始化為空，等待真實 SC 進入
+                scEvents: []
             });
 
-            alert("🚀 成功啟動雲端計時與真實 SC 實時監聽！");
+            alert("🚀 成功啟動雲端計時！");
         }
 
         // 暫停/繼續
@@ -279,9 +292,9 @@
             }
         }
 
-        // Cut Off 埋數：寫入 record 並停止課金計算
+        // Cut Off 埋數
         async function cutOffTimer() {
-            if (confirm("✂️ 確定要進行「直播埋數」嗎？埋數後將停止真實 SC 抓取並封存記錄。")) {
+            if (confirm("✂️ 確定要進行「直播埋數」嗎？")) {
                 if (scPollInterval) { clearInterval(scPollInterval); scPollInterval = null; }
                 
                 const snap = await getDoc(docRef);
@@ -321,7 +334,7 @@
                     status: "cutoff",
                     isPaused: false
                 });
-                alert("✅ 埋數成功！此場資料已自動累積至 Record 頁面。");
+                alert("✅ 埋數成功！");
             }
         }
 
@@ -346,7 +359,7 @@
             document.getElementById("elapsedBox").innerText = "總直播累積：00:00:00";
             document.getElementById("statusBox").innerHTML = "狀態：未開始";
             document.getElementById("pauseBtn").style.display = "none";
-            document.getElementById("scCardListContainer").innerHTML = `<div style="text-align: center; color: #65676B; font-size: 12px;">暫無真實 SC 紀錄</div>`;
+            document.getElementById("scCardListContainer").innerHTML = `<div style="text-align: center; color: #65676B; font-size: 12px;">等待真實 SC 進入中...</div>`;
             document.getElementById("totalScBadge").innerText = "總計: $HKD 0";
         }
 
@@ -407,7 +420,6 @@
             document.getElementById("totalScBadge").innerText = `總計: $HKD ${total}`;
         }
 
-        // 讀取並渲染 Record 頁面
         async function loadHistoryRecords() {
             const container = document.getElementById("recordContainerList");
             if (!container) return;
@@ -418,7 +430,7 @@
                 container.innerHTML = "";
 
                 if (querySnapshot.empty) {
-                    container.innerHTML = `<div style="text-align: center; color: #65676B; padding: 30px;">暫時未有任何直播紀錄（當你點擊 Cut Off 埋數時會自動生成）</div>`;
+                    container.innerHTML = `<div style="text-align: center; color: #65676B; padding: 30px;">暫時未有任何直播紀錄</div>`;
                     return;
                 }
 
@@ -467,7 +479,6 @@
             }
         }
 
-        // 分頁切換控制
         function switchTab(tabName) {
             const dashboardView = document.getElementById("dashboardView");
             const recordView = document.getElementById("recordView");
@@ -683,9 +694,7 @@
     <!-- 📋 歷史 Record 列表頁面 -->
     <div class="record-container" id="recordView">
         <h2 style="margin: 0 0 10px 0; font-size: 18px; color: #1A1A1A;">📋 歷史直播 Record 列表</h2>
-        <div id="recordContainerList" style="display: flex; flex-direction: column; gap: 15px;">
-            <!-- 動態生成的每一場直播卡片 -->
-        </div>
+        <div id="recordContainerList" style="display: flex; flex-direction: column; gap: 15px;"></div>
     </div>
 
 </body>
