@@ -6,7 +6,7 @@
     <!-- 引入 Firebase SDK (v10 模組化版本) -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc, collection, addDate, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         // ==========================================
         // Firebase 設定配置
@@ -108,8 +108,11 @@
             const targetEndTime = now + (hoursToAdd * 60 * 60 * 1000);
             const streamId = now;
 
-            // 初始 SC 數據為空（如果你想保留測試數據可以改返落去，目前係乾淨開局）
-            const scEvents = [];
+            // 模擬初始 SC 數據
+            const scEvents = [
+                { time: new Date(now).toLocaleTimeString("en-US", { timeZone: "Asia/Hong_Kong", hour12: false }), name: "系統測試 A", amount: 50 },
+                { time: new Date(now + 10000).toLocaleTimeString("en-US", { timeZone: "Asia/Hong_Kong", hour12: false }), name: "系統測試 B", amount: 100 }
+            ];
 
             // 寫入雲端 Firestore 資料庫
             await setDoc(docRef, {
@@ -124,7 +127,7 @@
                 scEvents: scEvents
             });
 
-            alert("🚀 成功啟動雲端計時！");
+            alert("🚀 成功啟動雲端計時！現在你可以隨時 F5、關閉網頁甚至關機，雲端時間依然持續準確。");
         }
 
         // 暫停/繼續
@@ -134,6 +137,7 @@
             const data = snap.data();
 
             if (!data.isPaused) {
+                // 進入暫停：計算當前剩餘毫秒數
                 const remaining = data.targetEndTime - Date.now();
                 await updateDoc(docRef, {
                     status: "paused",
@@ -141,6 +145,7 @@
                     pausedRemainingMs: remaining > 0 ? remaining : 0
                 });
             } else {
+                // 恢復計時：重新計算新的目標結束時間
                 const newTarget = Date.now() + data.pausedRemainingMs;
                 await updateDoc(docRef, {
                     status: "running",
@@ -151,43 +156,9 @@
             }
         }
 
-        // Cut Off（同時自動存入 history 歷史記錄）
+        // Cut Off
         async function cutOffTimer() {
-            if (confirm("✂️ 確定要執行 Cut Off 立即終止倒數，並將數據存入 Record 嗎？")) {
-                const snap = await getDoc(docRef);
-                if (snap.exists()) {
-                    const data = snap.data();
-                    const now = Date.now();
-                    const elapsedMs = data.startTime ? (now - data.startTime) : 0;
-                    
-                    // 計算總累積時間字串
-                    const elHours = Math.floor((elapsedMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-                    const elMinutes = Math.floor((elapsedMs % (1000 * 60 * 60)) / (1000 * 60));
-                    const elSeconds = Math.floor((elapsedMs % (1000 * 60)) / 1000);
-                    const totalElapsedStr = `${String(elHours).padStart(2, '0')}:${String(elMinutes).padStart(2, '0')}:${String(elSeconds).padStart(2, '0')}`;
-
-                    // 計算 SC 總額
-                    let totalSc = 0;
-                    if (data.scEvents) {
-                        data.scEvents.forEach(sc => { totalSc += parseFloat(sc.amount) || 0; });
-                    }
-
-                    // 寫入到 history 集合中
-                    try {
-                        await addDoc(collection(db, "history"), {
-                            videoUrl: data.videoUrl || "",
-                            videoId: data.videoId || "Unknown",
-                            totalElapsed: totalElapsedStr,
-                            totalScAmount: totalSc,
-                            cutoffTime: new Date().toLocaleString("en-US", { timeZone: "Asia/Hong_Kong" }),
-                            scCount: data.scEvents ? data.scEvents.length : 0
-                        });
-                    } catch (e) {
-                        console.error("寫入歷史記錄失敗: ", e);
-                    }
-                }
-
-                // 更新當前狀態為 cutoff
+            if (confirm("✂️ 確定要執行 Cut Off 立即終止倒數嗎？")) {
                 await updateDoc(docRef, {
                     status: "cutoff",
                     targetEndTime: Date.now(),
@@ -230,17 +201,20 @@
             document.getElementById("countdown").innerHTML = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
         }
 
+        // 每秒更新畫面上的倒數與累積時間
         function updateCountdown() {
             if (!window.serverTargetEndTime || window.serverIsPaused) return;
 
             const now = Date.now();
             const elapsedMs = now - window.serverStartTime;
             
+            // 計算累積時間
             const elHours = Math.floor((elapsedMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
             const elMinutes = Math.floor((elapsedMs % (1000 * 60 * 60)) / (1000 * 60));
             const elSeconds = Math.floor((elapsedMs % (1000 * 60)) / 1000);
             document.getElementById("elapsedBox").innerText = `總直播累積：${String(elHours).padStart(2, '0')}:${String(elMinutes).padStart(2, '0')}:${String(elSeconds).padStart(2, '0')}`;
 
+            // 計算剩餘時間
             const distance = window.serverTargetEndTime - now;
             const countdownElem = document.getElementById("countdown");
 
@@ -315,6 +289,9 @@
             }
         }
 
+        // ==========================================
+        // 關鍵：將所有函數手動掛載到 window，令按鈕 onclick 生效
+        // ==========================================
         window.startTimer = startTimer;
         window.togglePauseTimer = togglePauseTimer;
         window.cutOffTimer = cutOffTimer;
@@ -392,10 +369,7 @@
         <div class="nav-logo">
             <span style="color: #0066FF; font-size: 20px;">✦</span> 雲端加班台 Dashboard
         </div>
-        <div style="display: flex; gap: 15px; align-items: center;">
-            <a href="record.html" style="font-size: 13px; color: #0066FF; text-decoration: none; font-weight: bold; background: #E8F0FE; padding: 6px 12px; border-radius: 10px;">📋 查看歷史 Record</a>
-            <div style="font-size: 12px; color: #65676B;">🔥 雲端同步模式</div>
-        </div>
+        <div style="font-size: 12px; color: #65676B;">🔥 雲端同步模式：支援 20 日超長續航、F5 零丟失</div>
     </div>
 
     <div class="dashboard-grid">
