@@ -57,7 +57,7 @@
                         if (data.status === "running") {
                             document.getElementById("statusBox").innerHTML = `狀態：已綁定 (${data.videoId || 'Live'})`;
                             document.getElementById("pauseBtn").style.display = "inline-block";
-                            document.getElementById("pauseBtn").innerText = "⏸️ 暫停";
+                            document.getElementById("pauseBtn").innerText = "暫停";
                             document.getElementById("timerStateDesc").innerText = "雲端倒數中";
                             if (!timerInterval) timerInterval = setInterval(updateCountdown, 1000);
                             
@@ -67,7 +67,7 @@
                         } else if (data.status === "paused") {
                             document.getElementById("statusBox").innerHTML = `狀態：已暫停`;
                             document.getElementById("pauseBtn").style.display = "inline-block";
-                            document.getElementById("pauseBtn").innerText = "▶️ 繼續";
+                            document.getElementById("pauseBtn").innerText = "繼續";
                             document.getElementById("timerStateDesc").innerText = "雲端已暫停";
                             if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
                             if (scPollInterval) { clearInterval(scPollInterval); scPollInterval = null; }
