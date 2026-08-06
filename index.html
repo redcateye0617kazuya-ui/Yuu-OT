@@ -109,7 +109,7 @@
             return { title, thumbnail };
         }
 
-        // 透過 YouTube API 取得直播的 liveChatId（已加入詳細除錯訊息）
+        // 透過 YouTube API 取得直播的 liveChatId
         async function fetchLiveChatId(videoId, apiKey) {
             try {
                 const url = `https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails&id=${videoId}&key=${apiKey}`;
@@ -122,7 +122,7 @@
 
                 if (data.error) {
                     console.error("YouTube API 發生錯誤:", data.error.message);
-                    alert("⚠️ YouTube API 錯誤: " + data.error.message);
+                    alert("YouTube API 錯誤: " + data.error.message);
                     return null;
                 }
 
@@ -208,7 +208,7 @@
             if (snap.exists()) {
                 const currentData = snap.data();
                 if (currentData.status === "running" || currentData.status === "paused") {
-                    alert("❌ 當前直播尚未 Cut Off 埋數，禁止直接更換連結！");
+                    alert("當前直播尚未 Cut Off 埋數，禁止直接更換連結！");
                     return;
                 }
             }
@@ -224,12 +224,12 @@
             }
 
             if (!videoId && !videoUrl) {
-                alert("❌ 請輸入有效的 YouTube 連結！");
+                alert("請輸入有效的 YouTube 連結！");
                 return;
             }
 
             if (!apiKey) {
-                alert("⚠️ 請先輸入你的 YouTube Data API Key！");
+                alert("請先輸入你的 YouTube Data API Key！");
                 return;
             }
 
@@ -237,7 +237,7 @@
             const liveChatId = await fetchLiveChatId(videoId, apiKey);
 
             if (!liveChatId) {
-                alert("⚠️ 警告：無法獲取該直播的 LiveChatId。請確保輸入的是正在進行中的 YouTube 直播連結，且你的 API Key 有效。");
+                alert("警告：無法獲取該直播的 LiveChatId。請確保輸入的是正在進行中的 YouTube 直播連結，且你的 API Key 有效。");
             }
 
             const hoursToAdd = parseFloat(document.getElementById("duration").value);
@@ -261,7 +261,7 @@
                 scEvents: []
             });
 
-            alert("🚀 成功啟動雲端計時！");
+            alert("成功啟動雲端計時！");
         }
 
         // 暫停/繼續
@@ -270,7 +270,7 @@
             if (!snap.exists()) return;
             const data = snap.data();
             if (data.status === "cutoff") {
-                alert("⚠️ 當前已進入埋數狀態，無法暫停。");
+                alert("當前已進入埋數狀態，無法暫停。");
                 return;
             }
 
@@ -294,7 +294,7 @@
 
         // Cut Off 埋數
         async function cutOffTimer() {
-            if (confirm("✂️ 確定要進行「直播埋數」嗎？")) {
+            if (confirm("確定要進行「直播埋數」嗎？")) {
                 if (scPollInterval) { clearInterval(scPollInterval); scPollInterval = null; }
                 
                 const snap = await getDoc(docRef);
@@ -334,13 +334,13 @@
                     status: "cutoff",
                     isPaused: false
                 });
-                alert("✅ 埋數成功！");
+                alert("埋數成功！");
             }
         }
 
         // 重設
         async function resetTimer() {
-            if (confirm("🔄 確定要重設計時嗎？")) {
+            if (confirm("確定要重設計時嗎？")) {
                 if (scPollInterval) { clearInterval(scPollInterval); scPollInterval = null; }
                 await setDoc(docRef, {
                     status: "reset",
@@ -463,7 +463,7 @@
                                 <div style="font-size: 15px; font-weight: bold; color: #1A1A1A;">${data.videoTitle || 'YouTube 直播節目'}</div>
                                 <div style="font-size: 12px; color: #65676B;">埋數時間：${data.cutoffTime || ''}</div>
                                 <div style="font-size: 12px; color: #0066FF; font-weight: bold;">總時長：${data.totalElapsed || '00:00:00'} ｜ SC 總額：$HKD ${data.totalScAmount || 0}</div>
-                                <div style="margin-top: 4px;"><a href="${data.videoUrl}" target="_blank" style="font-size: 11px; color: #0066FF; text-decoration: none;">🔗 觀看 YouTube 連結</a></div>
+                                <div style="margin-top: 4px;"><a href="${data.videoUrl}" target="_blank" style="font-size: 11px; color: #0066FF; text-decoration: none;">觀看 YouTube 連結</a></div>
                             </div>
                         </div>
                         <div style="margin-top: 15px; background: #FAFBFC; border: 1px solid #E4E6EB; border-radius: 12px; padding: 8px;">
@@ -629,9 +629,9 @@
         </div>
         <div class="nav-tabs">
             <button class="tab-btn" id="tabDashboardBtn" onclick="switchTab('dashboard')" style="background: #1A1A1A; color: #FFFFFF;">主控台</button>
-            <button class="tab-btn" id="tabRecordBtn" onclick="switchTab('record')">📋 歷史 Record 列表</button>
+            <button class="tab-btn" id="tabRecordBtn" onclick="switchTab('record')">歷史 Record 列表</button>
         </div>
-        <div style="font-size: 12px; color: #65676B;">🔥 實時 API 抓取模式</div>
+        <div style="font-size: 12px; color: #65676B;">實時 API 抓取模式</div>
     </div>
 
     <!-- 主控台頁面 -->
@@ -648,10 +648,10 @@
                 <option value="4.5" selected>4.5H</option>
                 <option value="480">480H (20日測試)</option>
             </select>
-            <button type="button" onclick="startTimer()" style="background: #0066FF; color: #FFFFFF;">🚀 Start</button>
-            <button type="button" id="pauseBtn" onclick="togglePauseTimer()" style="background: #FF9500; color: #FFFFFF; display: none;">⏸️ 暫停</button>
-            <button type="button" onclick="cutOffTimer()" style="background: #5856D6; color: #FFFFFF;">✂️ Cut Off 埋數</button>
-            <button type="button" onclick="resetTimer()" style="background: #F4F6F9; color: #1A1A1A; border: 1px solid #E4E6EB;">🔄 重設</button>
+            <button type="button" onclick="startTimer()" style="background: #0066FF; color: #FFFFFF;">Start</button>
+            <button type="button" id="pauseBtn" onclick="togglePauseTimer()" style="background: #FF9500; color: #FFFFFF; display: none;">暫停</button>
+            <button type="button" onclick="cutOffTimer()" style="background: #5856D6; color: #FFFFFF;">Cut Off 埋數</button>
+            <button type="button" onclick="resetTimer()" style="background: #F4F6F9; color: #1A1A1A; border: 1px solid #E4E6EB;">重設</button>
         </div>
 
         <div class="left-section">
@@ -673,7 +673,7 @@
             </div>
 
             <div class="widget-box">
-                <h4 style="margin: 0 0 8px 0; color: #1A1A1A; font-size: 14px;">🇭🇰 香港即時時間</h4>
+                <h4 style="margin: 0 0 8px 0; color: #1A1A1A; font-size: 14px;">香港即時時間</h4>
                 <div style="font-weight: bold; color: #0066FF; font-size: 20px; letter-spacing: 1px;" id="hk-realtime">--:--:--</div>
                 <div style="font-size: 11px; color: #65676B; margin-top: 4px;" id="hk-realdate">----/--/--</div>
             </div>
@@ -681,19 +681,19 @@
 
         <div class="right-section">
             <div class="right-section-header">
-                <h3>🏆 實時 SC 排行榜</h3>
+                <h3>實時 SC 排行榜</h3>
                 <div class="total-sc-badge" id="totalScBadge">總計: $HKD 0</div>
             </div>
             <div id="scCardListContainer" style="display: flex; flex-direction: column; gap: 8px;">
-                <div style="text-align: center; color: #65676B; font-size: 12px; padding: 20px;">等待真實 Super Chat 進入中...</div>
+                <div style="text-align: center; color: #65676B; font-size: 12px; padding: 20px;">等待真實 SC 進入中...</div>
             </div>
-            <div style="text-align: center; font-size: 11px; color: #65676B; margin-top: auto;">連線狀態：YouTube API 實時監聽中 🟢</div>
+            <div style="text-align: center; font-size: 11px; color: #65676B; margin-top: auto;">連線狀態：YouTube API 實時監聽中</div>
         </div>
     </div>
 
-    <!-- 📋 歷史 Record 列表頁面 -->
+    <!-- 歷史 Record 列表頁面 -->
     <div class="record-container" id="recordView">
-        <h2 style="margin: 0 0 10px 0; font-size: 18px; color: #1A1A1A;">📋 歷史直播 Record 列表</h2>
+        <h2 style="margin: 0 0 10px 0; font-size: 18px; color: #1A1A1A;">歷史直播 Record 列表</h2>
         <div id="recordContainerList" style="display: flex; flex-direction: column; gap: 15px;"></div>
     </div>
 
