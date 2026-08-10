@@ -114,6 +114,10 @@ function setupCampaignSync() {
 
         document.getElementById("yt_api_key").value = data.ytApiKey || "";
 
+        const isIdle = !data.status || data.status === "idle";
+        const durationInput = document.getElementById("duration");
+        if (durationInput) durationInput.style.display = isIdle ? "" : "none";
+
         const session = data.currentSession || {};
         if (session.active) {
             document.getElementById("video_url").value = session.videoUrl || "";
@@ -248,6 +252,8 @@ async function startSession() {
         alert("警告：無法獲取該直播的 LiveChatId，SC 將無法自動同步，請確保輸入的是正在進行中的直播連結。");
     }
 
+    const isFirstEverStart = !data || !data.status || data.status === "idle";
+
     const now = Date.now();
     const updatePayload = {
         ytApiKey: apiKey,
@@ -263,21 +269,23 @@ async function startSession() {
         currentSessionPaymeEvents: []
     };
 
-    if (!data || !data.status || data.status === "idle") {
+    if (isFirstEverStart) {
+        // 馬拉松第一次開始：用呢次嘅基本開台鐘數起錶，之後換 Link 唔會再加呢筆
         const hoursToAdd = parseFloat(document.getElementById("duration").value);
+        if (isNaN(hoursToAdd) || hoursToAdd <= 0) { alert("請輸入正確嘅基本開台鐘數！"); return; }
         updatePayload.status = "running";
         updatePayload.isPaused = false;
         updatePayload.startTime = now;
         updatePayload.targetEndTime = now + hoursToAdd * 3600000;
         updatePayload.pausedRemainingMs = 0;
-        updatePayload.totalAmount = data ? (data.totalAmount || 0) : 0;
-        updatePayload.bonusMsGranted = data ? (data.bonusMsGranted || 0) : 0;
-        updatePayload.leaderboardSc = data ? (data.leaderboardSc || []) : [];
-        updatePayload.leaderboardPayme = data ? (data.leaderboardPayme || []) : [];
+        updatePayload.totalAmount = 0;
+        updatePayload.bonusMsGranted = 0;
+        updatePayload.leaderboardSc = [];
+        updatePayload.leaderboardPayme = [];
     }
 
     await setDoc(campaignRef, updatePayload, { merge: true });
-    alert("成功開始新直播 Session！");
+    alert(isFirstEverStart ? "成功開始馬拉松！" : "成功開始新直播 Session！");
 }
 
 async function cutOffSession() {
@@ -594,20 +602,22 @@ function drawWheel(canvas, items) {
         ctx.stroke();
 
         ctx.save();
-        ctx.rotate(start + sliceAngle / 2);
-        ctx.textAlign = "right";
+        const midAngle = start + sliceAngle / 2;
+        const flipped = Math.cos(midAngle) < 0;
+        ctx.rotate(flipped ? midAngle + Math.PI : midAngle);
+        ctx.textAlign = flipped ? "left" : "right";
         ctx.fillStyle = "#FFFFFF";
-        ctx.font = "bold 11px sans-serif";
-        const label = item.label.length > 8 ? item.label.slice(0, 8) + "…" : item.label;
-        ctx.fillText(label, r - 10, 4);
+        ctx.font = "bold 15px sans-serif";
+        const label = item.label.length > 12 ? item.label.slice(0, 12) + "…" : item.label;
+        ctx.fillText(label, flipped ? -(r - 16) : (r - 16), 5);
         ctx.restore();
     });
     ctx.restore();
 
     ctx.beginPath();
-    ctx.moveTo(cx - 8, 6);
-    ctx.lineTo(cx + 8, 6);
-    ctx.lineTo(cx, 22);
+    ctx.moveTo(cx - 12, 8);
+    ctx.lineTo(cx + 12, 8);
+    ctx.lineTo(cx, 32);
     ctx.closePath();
     ctx.fillStyle = "#1A1A1A";
     ctx.fill();
@@ -639,20 +649,21 @@ function buildWheelBlock(wheel) {
             <div class="wheel-items-col">
                 <div class="wheel-item-add-row">
                     <input type="text" placeholder="項目名稱" class="wheel-item-label">
+                    <label class="wheel-item-toggle"><input type="checkbox" class="wheel-item-affects-timer" checked> 加鐘</label>
                     <input type="number" placeholder="±分鐘" class="wheel-item-minutes">
                     <button type="button" class="add-wheel-item-btn">加</button>
                 </div>
                 <div class="wheel-item-list">
                     ${items.map((it) => `
                         <div class="wheel-item-row" data-item-id="${it.id}">
-                            <span>${escapeHtml(it.label)}（${it.effectMinutes >= 0 ? "+" : ""}${it.effectMinutes}分鐘）</span>
+                            <span>${escapeHtml(it.label)}${it.effectMinutes != null ? `（${it.effectMinutes >= 0 ? "+" : ""}${it.effectMinutes}分鐘）` : ' <span class="no-effect-tag">（不影響時間）</span>'}</span>
                             <button type="button" class="del-btn del-item-btn">✕</button>
                         </div>
                     `).join("")}
                 </div>
             </div>
             <div class="wheel-canvas-col">
-                <canvas id="wheelCanvas_${wheel.id}" width="200" height="200"></canvas>
+                <canvas id="wheelCanvas_${wheel.id}" width="320" height="320"></canvas>
                 <button type="button" class="spin-btn">🎡 轉！</button>
             </div>
         </div>
@@ -661,7 +672,7 @@ function buildWheelBlock(wheel) {
             <div class="wheel-spin-list">
                 ${spins.length === 0 ? '<div class="empty-hint">未有轉過</div>' : spins.slice().reverse().map((s) => `
                     <div class="wheel-spin-row" data-spin-id="${s.id}">
-                        <span>${hkTimeString(s.timestamp)} - ${escapeHtml(s.resultLabel)}（${s.effectMinutes >= 0 ? "+" : ""}${s.effectMinutes}分鐘）</span>
+                        <span>${hkTimeString(s.timestamp)} - ${escapeHtml(s.resultLabel)}${s.effectMinutes != null ? `（${s.effectMinutes >= 0 ? "+" : ""}${s.effectMinutes}分鐘）` : ''}</span>
                         <button type="button" class="del-btn del-spin-btn">✕</button>
                     </div>
                 `).join("")}
@@ -672,6 +683,11 @@ function buildWheelBlock(wheel) {
     block.querySelector(".wheel-name-input").addEventListener("change", (e) => renameWheel(wheel.id, e.target.value));
     block.querySelector(".del-wheel-btn").addEventListener("click", () => deleteWheel(wheel.id));
     block.querySelector(".add-wheel-item-btn").addEventListener("click", () => addWheelItem(wheel.id, block));
+    const affectsCheckbox = block.querySelector(".wheel-item-affects-timer");
+    const minutesInputEl = block.querySelector(".wheel-item-minutes");
+    affectsCheckbox.addEventListener("change", () => {
+        minutesInputEl.style.display = affectsCheckbox.checked ? "" : "none";
+    });
     block.querySelectorAll(".del-item-btn").forEach((btn) => {
         btn.addEventListener("click", () => deleteWheelItem(wheel.id, btn.closest(".wheel-item-row").dataset.itemId));
     });
@@ -709,14 +725,21 @@ async function deleteWheel(wheelId) {
 
 async function addWheelItem(wheelId, blockEl) {
     const labelInput = blockEl.querySelector(".wheel-item-label");
+    const affectsCheckbox = blockEl.querySelector(".wheel-item-affects-timer");
     const minutesInput = blockEl.querySelector(".wheel-item-minutes");
     const label = labelInput.value.trim();
-    const minutes = parseFloat(minutesInput.value);
-    if (!label || isNaN(minutes)) { alert("請輸入項目名稱同分鐘數"); return; }
+    if (!label) { alert("請輸入項目名稱"); return; }
+
+    let effectMinutes = null;
+    if (affectsCheckbox.checked) {
+        const minutes = parseFloat(minutesInput.value);
+        if (isNaN(minutes)) { alert("請輸入分鐘數，或者取消勾選「加鐘」"); return; }
+        effectMinutes = minutes;
+    }
 
     const wheel = wheelsCache.find((w) => w.id === wheelId);
     if (!wheel) return;
-    const items = [...(wheel.items || []), { id: genId(), label, effectMinutes: minutes }];
+    const items = [...(wheel.items || []), { id: genId(), label, effectMinutes }];
     await updateDoc(doc(db, "wheels", wheelId), { items });
 }
 
@@ -763,7 +786,9 @@ function spinWheel(wheelId, btnEl) {
 }
 
 async function applyWheelResult(wheel, chosenItem) {
-    await adjustTime(chosenItem.effectMinutes * 60000);
+    if (chosenItem.effectMinutes != null) {
+        await adjustTime(chosenItem.effectMinutes * 60000);
+    }
     const spins = [...(wheel.spins || []), {
         id: genId(),
         resultLabel: chosenItem.label,
@@ -771,7 +796,10 @@ async function applyWheelResult(wheel, chosenItem) {
         timestamp: Date.now()
     }];
     await updateDoc(doc(db, "wheels", wheel.id), { spins });
-    alert(`輪盤結果：${chosenItem.label}（${chosenItem.effectMinutes >= 0 ? "+" : ""}${chosenItem.effectMinutes} 分鐘）`);
+    const effectText = chosenItem.effectMinutes != null
+        ? `（${chosenItem.effectMinutes >= 0 ? "+" : ""}${chosenItem.effectMinutes} 分鐘）`
+        : "";
+    alert(`輪盤結果：${chosenItem.label}${effectText}`);
 }
 
 // ==========================================

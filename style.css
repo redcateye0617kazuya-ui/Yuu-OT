@@ -104,12 +104,14 @@ body {
 .del-wheel-btn { padding: 8px 14px; border-radius: 10px; border: none; background: #FFECEC; color: #FF3B30; font-weight: bold; cursor: pointer; font-size: 12px; }
 .wheel-block-body { display: flex; gap: 20px; flex-wrap: wrap; }
 .wheel-items-col { flex: 1; min-width: 220px; }
-.wheel-item-add-row { display: flex; gap: 6px; margin-bottom: 10px; }
+.wheel-item-add-row { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; align-items: center; }
 .wheel-item-add-row input { flex: 1; padding: 8px 10px; border-radius: 8px; border: 1px solid #E4E6EB; background: #F4F6F9; font-size: 12px; min-width: 0; }
 .wheel-item-add-row button { padding: 8px 12px; border-radius: 8px; border: none; background: #0066FF; color: #FFFFFF; font-weight: bold; cursor: pointer; }
+.wheel-item-toggle { display: flex; align-items: center; gap: 4px; font-size: 11px; color: #65676B; white-space: nowrap; }
 .wheel-item-row { display: flex; justify-content: space-between; align-items: center; background: #F4F6F9; border: 1px solid #E4E6EB; border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; font-size: 12px; }
+.no-effect-tag { color: #65676B; font-size: 11px; }
 .wheel-canvas-col { display: flex; flex-direction: column; align-items: center; gap: 12px; }
-.wheel-canvas-col canvas { transition: transform 4s cubic-bezier(0.17, 0.67, 0.12, 0.99); }
+.wheel-canvas-col canvas { transition: transform 4s cubic-bezier(0.17, 0.67, 0.12, 0.99); max-width: 100%; height: auto; }
 .spin-btn { padding: 10px 24px; border-radius: 12px; border: none; background: #FF9500; color: #FFFFFF; font-weight: bold; cursor: pointer; }
 .spin-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .wheel-spin-history { margin-top: 16px; border-top: 1px solid #F4F6F9; padding-top: 12px; }
