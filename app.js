@@ -114,6 +114,10 @@ function setupCampaignSync() {
 
         document.getElementById("yt_api_key").value = data.ytApiKey || "";
 
+        const isIdle = !data.status || data.status === "idle";
+        const durationInput = document.getElementById("duration");
+        if (durationInput) durationInput.style.display = isIdle ? "" : "none";
+
         const session = data.currentSession || {};
         if (session.active) {
             document.getElementById("video_url").value = session.videoUrl || "";
@@ -248,8 +252,7 @@ async function startSession() {
         alert("警告：無法獲取該直播的 LiveChatId，SC 將無法自動同步，請確保輸入的是正在進行中的直播連結。");
     }
 
-    const hoursToAdd = parseFloat(document.getElementById("duration").value);
-    if (isNaN(hoursToAdd) || hoursToAdd <= 0) { alert("請輸入正確嘅基本開台鐘數！"); return; }
+    const isFirstEverStart = !data || !data.status || data.status === "idle";
 
     const now = Date.now();
     const updatePayload = {
@@ -266,8 +269,10 @@ async function startSession() {
         currentSessionPaymeEvents: []
     };
 
-    if (!data || !data.status || data.status === "idle") {
-        // 馬拉松第一次開始：用呢次嘅基本開台鐘數起錶
+    if (isFirstEverStart) {
+        // 馬拉松第一次開始：用呢次嘅基本開台鐘數起錶，之後換 Link 唔會再加呢筆
+        const hoursToAdd = parseFloat(document.getElementById("duration").value);
+        if (isNaN(hoursToAdd) || hoursToAdd <= 0) { alert("請輸入正確嘅基本開台鐘數！"); return; }
         updatePayload.status = "running";
         updatePayload.isPaused = false;
         updatePayload.startTime = now;
@@ -277,16 +282,10 @@ async function startSession() {
         updatePayload.bonusMsGranted = 0;
         updatePayload.leaderboardSc = [];
         updatePayload.leaderboardPayme = [];
-    } else if (data.isPaused) {
-        // 馬拉松進行緊但暫停中：加落 pausedRemainingMs
-        updatePayload.pausedRemainingMs = Math.max(0, (data.pausedRemainingMs || 0)) + hoursToAdd * 3600000;
-    } else {
-        // 馬拉松進行緊，換新 Link 開新場：將呢次嘅基本開台鐘數加落現有 Timer
-        updatePayload.targetEndTime = (data.targetEndTime || now) + hoursToAdd * 3600000;
     }
 
     await setDoc(campaignRef, updatePayload, { merge: true });
-    alert(`成功開始新直播 Session！已加返 ${hoursToAdd} 小時基本開台時間。`);
+    alert(isFirstEverStart ? "成功開始馬拉松！" : "成功開始新直播 Session！");
 }
 
 async function cutOffSession() {
