@@ -4,102 +4,121 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>雲端加班台 Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     <script type="module" src="app.js"></script>
 </head>
 <body>
 
-    <div class="navbar">
-        <div class="nav-logo">
-            <span style="color: #0066FF; font-size: 20px;">✦</span> 雲端加班台
-        </div>
-        <div class="nav-tabs">
-            <button class="tab-btn active" data-tab="dashboard">主控台</button>
-            <button class="tab-btn" data-tab="record">Record / Report</button>
-            <button class="tab-btn" data-tab="rule">Rule Setting</button>
-            <button class="tab-btn" data-tab="wheel">輪盤</button>
-        </div>
-    </div>
-
-    <!-- ============ Dashboard ============ -->
-    <div class="page-view dashboard-grid" id="dashboardView">
-        <div class="control-bar" style="grid-column: 1 / -1;">
-            <input type="text" id="video_url" placeholder="請輸入 YouTube 直播 Link...">
-            <input type="text" id="yt_api_key" placeholder="輸入 YouTube Data API Key...">
-            <input type="number" id="duration" placeholder="基本開台鐘數 (小時)" value="2" min="0.5" step="0.5">
-            <button type="button" id="startBtn" style="background: #0066FF; color: #FFFFFF;">開始 / 換Link</button>
-            <button type="button" id="pauseBtn" style="background: #FF9500; color: #FFFFFF; display: none;">暫停</button>
-            <button type="button" id="cutoffBtn" style="background: #5856D6; color: #FFFFFF; display: none;">Cut Off 埋數</button>
-            <button type="button" id="resetBtn" style="background: #F4F6F9; color: #1A1A1A; border: 1px solid #E4E6EB;">重設馬拉松</button>
-        </div>
-
-        <div class="panel timer-panel">
-            <div class="timer-circle">
-                <span id="countdown">--:--:--</span>
+    <div class="app-shell">
+        <aside class="sidebar">
+            <div class="sidebar-logo">
+                <span class="logo-dots"><span></span><span></span><span></span><span></span></span>
+                雲端加班台
             </div>
-            <div class="time-adjust-row">
-                <button type="button" class="time-adjust-btn" data-delta-ms="-3600000">-1H</button>
-                <button type="button" class="time-adjust-btn" data-delta-ms="-600000">-10M</button>
-                <button type="button" class="time-adjust-btn" data-delta-ms="600000">+10M</button>
-                <button type="button" class="time-adjust-btn" data-delta-ms="3600000">+1H</button>
-            </div>
-            <div class="time-info-box" id="startTimeBox">開始時間：--</div>
-            <div class="time-info-box" id="endTimeBox">收工時間：--</div>
-            <div class="status-text" id="statusBox">狀態：未開始</div>
-        </div>
 
-        <div class="panel payme-panel">
-            <h3>PayMe 手動輸入</h3>
-            <div class="payme-form">
-                <input type="text" id="payme_name" placeholder="課金用戶名">
-                <input type="number" id="payme_amount" placeholder="金額 (HKD)">
-                <button type="button" id="addPaymeBtn">加入 PayMe 記錄</button>
+            <div class="sidebar-profile">
+                <div class="profile-avatar">🎬</div>
+                <div class="profile-name">Overtime Marathon</div>
+                <div class="profile-role">加班台控制中心</div>
             </div>
-            <div class="total-amount-badge" id="totalAmountBox">Total：$HKD 0</div>
-        </div>
 
-        <div class="leaderboard-stack">
-            <div class="panel">
-                <h3>SuperChat 金主榜</h3>
-                <div id="scLeaderboard"><div class="empty-hint">暫時未有紀錄</div></div>
+            <nav class="sidebar-nav">
+                <button class="tab-btn active" data-tab="dashboard" data-title="主控台">主控台</button>
+                <button class="tab-btn" data-tab="record" data-title="Record / Report">Record / Report</button>
+                <button class="tab-btn" data-tab="rule" data-title="Rule Setting">Rule Setting</button>
+                <button class="tab-btn" data-tab="wheel" data-title="輪盤">輪盤</button>
+            </nav>
+
+            <button type="button" id="resetBtn" class="sidebar-reset">↺ 重設馬拉松</button>
+        </aside>
+
+        <main class="main-content">
+            <header class="page-header">
+                <h1 id="pageTitle">主控台</h1>
+            </header>
+
+            <!-- ============ Dashboard ============ -->
+            <div class="page-view dashboard-grid" id="dashboardView">
+                <div class="control-bar" style="grid-column: 1 / -1;">
+                    <input type="text" id="video_url" placeholder="請輸入 YouTube 直播 Link...">
+                    <input type="text" id="yt_api_key" placeholder="輸入 YouTube Data API Key...">
+                    <input type="number" id="duration" placeholder="基本開台鐘數 (小時)" value="2" min="0.5" step="0.5">
+                    <button type="button" id="startBtn" class="btn btn-primary">開始 / 換Link</button>
+                    <button type="button" id="pauseBtn" class="btn btn-warning" style="display: none;">暫停</button>
+                    <button type="button" id="cutoffBtn" class="btn btn-accent" style="display: none;">Cut Off 埋數</button>
+                </div>
+
+                <div class="panel timer-panel">
+                    <div class="timer-circle">
+                        <span id="countdown">--:--:--</span>
+                    </div>
+                    <div class="time-adjust-row">
+                        <button type="button" class="time-adjust-btn" data-delta-ms="-3600000">-1H</button>
+                        <button type="button" class="time-adjust-btn" data-delta-ms="-600000">-10M</button>
+                        <button type="button" class="time-adjust-btn" data-delta-ms="600000">+10M</button>
+                        <button type="button" class="time-adjust-btn" data-delta-ms="3600000">+1H</button>
+                    </div>
+                    <div class="time-info-box" id="startTimeBox">開始時間：--</div>
+                    <div class="time-info-box" id="endTimeBox">收工時間：--</div>
+                    <div class="status-text" id="statusBox">狀態：未開始</div>
+                </div>
+
+                <div class="panel payme-panel">
+                    <h3>PayMe 手動輸入</h3>
+                    <div class="payme-form">
+                        <input type="text" id="payme_name" placeholder="課金用戶名">
+                        <input type="number" id="payme_amount" placeholder="金額 (HKD)">
+                        <button type="button" id="addPaymeBtn">加入 PayMe 記錄</button>
+                    </div>
+                    <div class="total-amount-badge" id="totalAmountBox">Total：$HKD 0</div>
+                </div>
+
+                <div class="leaderboard-stack">
+                    <div class="panel">
+                        <h3>SuperChat 金主榜</h3>
+                        <div id="scLeaderboard"><div class="empty-hint">暫時未有紀錄</div></div>
+                    </div>
+                    <div class="panel">
+                        <h3>PayMe 榜</h3>
+                        <div id="paymeLeaderboard"><div class="empty-hint">暫時未有紀錄</div></div>
+                    </div>
+                </div>
             </div>
-            <div class="panel">
-                <h3>PayMe 榜</h3>
-                <div id="paymeLeaderboard"><div class="empty-hint">暫時未有紀錄</div></div>
+
+            <!-- ============ Record / Report ============ -->
+            <div class="page-view" id="recordView" style="display: none;">
+                <div class="record-header">
+                    <div class="total-amount-badge" id="recordTotalAmount">Total：$HKD 0</div>
+                </div>
+                <div class="session-list" id="sessionListContainer"></div>
             </div>
-        </div>
-    </div>
 
-    <!-- ============ Record / Report ============ -->
-    <div class="page-view" id="recordView" style="display: none;">
-        <div class="record-header">
-            <h2>歷史直播 Record</h2>
-            <div class="total-amount-badge" id="recordTotalAmount">Total：$HKD 0</div>
-        </div>
-        <div class="session-list" id="sessionListContainer"></div>
-    </div>
-
-    <!-- ============ Rule Setting ============ -->
-    <div class="page-view" id="ruleView" style="display: none;">
-        <div class="panel">
-            <h3>加鐘規則設定</h3>
-            <div class="rule-form">
-                <input type="number" id="ruleMin" placeholder="金額下限 ($)">
-                <input type="number" id="ruleMax" placeholder="金額上限 (留空=無上限)">
-                <input type="number" id="ruleInterval" placeholder="每 $ 幾多">
-                <input type="number" id="ruleHours" placeholder="加幾多小時" value="1">
-                <button type="button" id="addRuleBtn">新增規則</button>
+            <!-- ============ Rule Setting ============ -->
+            <div class="page-view" id="ruleView" style="display: none;">
+                <div class="panel">
+                    <h3>加鐘規則設定</h3>
+                    <div class="rule-form">
+                        <input type="number" id="ruleMin" placeholder="金額下限 ($)">
+                        <input type="number" id="ruleMax" placeholder="金額上限 (留空=無上限)">
+                        <input type="number" id="ruleInterval" placeholder="每 $ 幾多">
+                        <input type="number" id="ruleHours" placeholder="加幾多小時" value="1">
+                        <button type="button" id="addRuleBtn">新增規則</button>
+                    </div>
+                    <div id="ruleListContainer"><div class="empty-hint">未設定任何規則</div></div>
+                </div>
             </div>
-            <div id="ruleListContainer"><div class="empty-hint">未設定任何規則</div></div>
-        </div>
-    </div>
 
-    <!-- ============ 輪盤 ============ -->
-    <div class="page-view" id="wheelView" style="display: none;">
-        <div class="wheel-toolbar">
-            <button type="button" id="addWheelBtn">➕ 新增輪盤</button>
-        </div>
-        <div id="wheelListContainer"><div class="empty-hint">未有任何輪盤，按上面「新增輪盤」開始</div></div>
+            <!-- ============ 輪盤 ============ -->
+            <div class="page-view" id="wheelView" style="display: none;">
+                <div class="wheel-toolbar">
+                    <button type="button" id="addWheelBtn">➕ 新增輪盤</button>
+                </div>
+                <div id="wheelListContainer"><div class="empty-hint">未有任何輪盤，按上面「新增輪盤」開始</div></div>
+            </div>
+        </main>
     </div>
 
 </body>

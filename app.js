@@ -112,7 +112,11 @@ function setupCampaignSync() {
         const data = snap.data();
         campaignCache = data;
 
-        document.getElementById("yt_api_key").value = data.ytApiKey || "";
+        const apiKeyInput = document.getElementById("yt_api_key");
+        apiKeyInput.value = data.ytApiKey || "";
+        apiKeyInput.readOnly = !!data.ytApiKey;
+        apiKeyInput.classList.toggle("locked-input", !!data.ytApiKey);
+        apiKeyInput.title = data.ytApiKey ? "API Key 已鎖定，重設馬拉松先可以修改" : "";
 
         const isIdle = !data.status || data.status === "idle";
         const durationInput = document.getElementById("duration");
@@ -572,18 +576,18 @@ function drawWheel(canvas, items) {
     if (!items || items.length === 0) {
         ctx.beginPath();
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
-        ctx.fillStyle = "#F4F6F9";
+        ctx.fillStyle = "#FBF5EE";
         ctx.fill();
-        ctx.strokeStyle = "#E4E6EB";
+        ctx.strokeStyle = "#EEE1D0";
         ctx.stroke();
-        ctx.fillStyle = "#65676B";
+        ctx.fillStyle = "#96897A";
         ctx.font = "12px sans-serif";
         ctx.textAlign = "center";
         ctx.fillText("未有項目", cx, cy);
         return;
     }
 
-    const palette = ["#0066FF", "#5856D6", "#FF9500", "#34C759", "#FF3B30", "#AF52DE", "#00C7BE", "#FFCC00"];
+    const palette = ["#E8734A", "#F0A93E", "#6B9E78", "#8D5B7C", "#C1552F", "#4F8C82", "#C99A3E", "#8C6E5A"];
     const sliceAngle = (Math.PI * 2) / items.length;
 
     ctx.save();
@@ -876,13 +880,27 @@ function buildSessionCard(data) {
 // ==========================================
 // Tab 切換 + 初始化
 // ==========================================
+const ACTIVE_TAB_STORAGE_KEY = "activeTab";
+
 function switchTab(tabName) {
     const views = { dashboard: "dashboardView", record: "recordView", rule: "ruleView", wheel: "wheelView" };
+    if (!views[tabName]) tabName = "dashboard";
+
     Object.entries(views).forEach(([key, id]) => {
         const el = document.getElementById(id);
         if (el) el.style.display = (key === tabName) ? (key === "dashboard" ? "grid" : "block") : "none";
     });
-    document.querySelectorAll(".tab-btn").forEach((btn) => btn.classList.toggle("active", btn.dataset.tab === tabName));
+
+    let title = "主控台";
+    document.querySelectorAll(".tab-btn").forEach((btn) => {
+        const isActive = btn.dataset.tab === tabName;
+        btn.classList.toggle("active", isActive);
+        if (isActive) title = btn.dataset.title || btn.textContent;
+    });
+    const pageTitle = document.getElementById("pageTitle");
+    if (pageTitle) pageTitle.textContent = title;
+
+    localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, tabName);
     if (tabName === "record") loadSessions();
 }
 
@@ -906,5 +924,5 @@ window.addEventListener("DOMContentLoaded", () => {
         btn.addEventListener("click", () => switchTab(btn.dataset.tab));
     });
 
-    switchTab("dashboard");
+    switchTab(localStorage.getItem(ACTIVE_TAB_STORAGE_KEY) || "dashboard");
 });
