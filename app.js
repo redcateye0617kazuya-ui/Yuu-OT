@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import {
     getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc, deleteDoc,
-    collection, addDoc, getDocs, query, orderBy
+    collection, addDoc, getDocs, query, orderBy, getCountFromServer
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 // ==========================================
@@ -25,11 +25,14 @@ const sessionsColRef = collection(db, "sessions");
 const wheelsColRef = collection(db, "wheels");
 
 let timerInterval = null;
+let statTickInterval = null;
 let scPollInterval = null;
 let currentPolledChatId = null;
 let rulesCache = [];
 let wheelsCache = [];
 const wheelRotationState = {};
+let lastCampaignUpdateTime = null;
+let lastSessionCountUpdateTime = null;
 
 // ==========================================
 // 工具函數
@@ -68,6 +71,55 @@ function mergeLeaderboards(scList, paymeList) {
     (scList || []).forEach((e) => merged.set(e.name, (merged.get(e.name) || 0) + e.amount));
     (paymeList || []).forEach((e) => merged.set(e.name, (merged.get(e.name) || 0) + e.amount));
     return Array.from(merged, ([name, amount]) => ({ name, amount }));
+}
+
+function relativeTimeLabel(ts) {
+    if (!ts) return "--";
+    const diffSec = Math.floor((Date.now() - ts) / 1000);
+    if (diffSec < 5) return "剛剛更新";
+    if (diffSec < 60) return `${diffSec}秒前更新`;
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}分鐘前更新`;
+    const diffHour = Math.floor(diffMin / 60);
+    return `${diffHour}小時前更新`;
+}
+
+function updateStatCards(data) {
+    const scTotal = (data.leaderboardSc || []).reduce((s, e) => s + (e.amount || 0), 0);
+    const paymeTotal = (data.leaderboardPayme || []).reduce((s, e) => s + (e.amount || 0), 0);
+    const contributorNames = new Set();
+    (data.currentSessionScEvents || []).forEach((e) => contributorNames.add(e.name));
+    (data.currentSessionPaymeEvents || []).forEach((e) => contributorNames.add(e.name));
+
+    const scEl = document.getElementById("statScTotal");
+    const paymeEl = document.getElementById("statPaymeTotal");
+    const contributorsEl = document.getElementById("statSessionContributors");
+    if (scEl) scEl.textContent = `$${scTotal.toLocaleString()}`;
+    if (paymeEl) paymeEl.textContent = `$${paymeTotal.toLocaleString()}`;
+    if (contributorsEl) contributorsEl.textContent = contributorNames.size;
+
+    lastCampaignUpdateTime = Date.now();
+}
+
+function tickStatTimestamps() {
+    const campaignLabel = relativeTimeLabel(lastCampaignUpdateTime);
+    ["statScUpdated", "statPaymeUpdated", "statContributorsUpdated"].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = campaignLabel;
+    });
+    const sessionCountUpdatedEl = document.getElementById("statSessionCountUpdated");
+    if (sessionCountUpdatedEl) sessionCountUpdatedEl.textContent = relativeTimeLabel(lastSessionCountUpdateTime);
+}
+
+async function refreshSessionCount() {
+    try {
+        const snap = await getCountFromServer(sessionsColRef);
+        const el = document.getElementById("statSessionCount");
+        if (el) el.textContent = snap.data().count;
+        lastSessionCountUpdateTime = Date.now();
+    } catch (e) {
+        console.error("讀取累積場數失敗:", e);
+    }
 }
 
 function extractVideoId(url) {
@@ -172,6 +224,7 @@ function setupCampaignSync() {
         if (recordTotalBox) recordTotalBox.innerText = totalText;
 
         renderLeaderboard("scLeaderboard", mergeLeaderboards(data.leaderboardSc, data.leaderboardPayme));
+        updateStatCards(data);
     }, (error) => notifyFirestoreError("Campaign", error));
 }
 
@@ -340,6 +393,7 @@ async function cutOffSession() {
         currentSessionScEvents: [],
         currentSessionPaymeEvents: []
     });
+    refreshSessionCount();
     alert("埋數成功！馬拉松總 Timer 繼續行緊，可以隨時入新 Link 開新場。");
 }
 
@@ -655,7 +709,7 @@ function buildWheelBlock(wheel) {
     block.innerHTML = `
         <div class="wheel-block-header">
             <input type="text" class="wheel-name-input" value="${escapeHtml(wheel.name || "")}">
-            <button type="button" class="del-wheel-btn">🗑 刪除輪盤</button>
+            <button type="button" class="del-wheel-btn">刪除輪盤</button>
         </div>
         <div class="wheel-block-body">
             <div class="wheel-items-col">
@@ -676,7 +730,7 @@ function buildWheelBlock(wheel) {
             </div>
             <div class="wheel-canvas-col">
                 <canvas id="wheelCanvas_${wheel.id}" width="400" height="400"></canvas>
-                <button type="button" class="spin-btn">🎡 轉！</button>
+                <button type="button" class="spin-btn">轉！</button>
             </div>
         </div>
         <div class="wheel-spin-history">
@@ -916,6 +970,8 @@ window.addEventListener("DOMContentLoaded", () => {
     setupCampaignSync();
     setupRulesSync();
     setupWheelsSync();
+    refreshSessionCount();
+    if (!statTickInterval) statTickInterval = setInterval(tickStatTimestamps, 1000);
 
     document.getElementById("startBtn").addEventListener("click", startSession);
     document.getElementById("pauseBtn").addEventListener("click", togglePause);
