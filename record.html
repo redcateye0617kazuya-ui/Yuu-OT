@@ -3,101 +3,10 @@
 <head>
     <meta charset="utf-8">
     <title>歷史直播記錄 - 雲端加班台</title>
-    <!-- 引入 Firebase SDK (v10 模組化版本) -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-
-        const firebaseConfig = {
-            apiKey: "AIzaSyCO1i0d_c7EO4jonhTx7ylib2-xAEbLa5M",
-            authDomain: "overtime-dashboard.firebaseapp.com",
-            projectId: "overtime-dashboard",
-            storageBucket: "overtime-dashboard.firebasestorage.app",
-            messagingSenderId: "442932326873",
-            appId: "1:442932326873:web:18a57cdfc48d31b62369c8"
-        };
-
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-
-        window.addEventListener('DOMContentLoaded', async () => {
-            await loadHistoryRecords();
-        });
-
-        async function loadHistoryRecords() {
-            const container = document.getElementById("historyContainer");
-            container.innerHTML = `<div style="text-align: center; color: #65676B; padding: 40px;">載入歷史記錄中...</div>`;
-
-            try {
-                const querySnapshot = await getDocs(collection(db, "history"));
-                container.innerHTML = "";
-
-                if (querySnapshot.empty) {
-                    container.innerHTML = `<div style="text-align: center; color: #65676B; padding: 40px;">暫時未有任何歷史直播記錄（當你在主畫面點擊 Cut Off 時會自動存入）</div>`;
-                    return;
-                }
-
-                querySnapshot.forEach((doc) => {
-                    const data = doc.data();
-                    let card = document.createElement("div");
-                    card.className = "history-card";
-                    card.innerHTML = `
-                        <div class="history-header">
-                            <span class="history-time">結束時間: ${data.cutoffTime || '未知時間'}</span>
-                            <span class="history-sc-badge">SC 總額: $HKD ${data.totalScAmount || 0}</span>
-                        </div>
-                        <div class="history-body">
-                            <div class="history-info"><strong>總累積時長：</strong> ${data.totalElapsed || '00:00:00'}</div>
-                            <div class="history-info"><strong>SC 筆數：</strong> ${data.scCount || 0} 筆</div>
-                            <div class="history-info"><strong>YouTube 連結：</strong> <a href="${data.videoUrl}" target="_blank" style="color: #0066FF; text-decoration: none;">${data.videoUrl || '無'}</a></div>
-                        </div>
-                    `;
-                    container.appendChild(card);
-                });
-            } catch (error) {
-                console.error("讀取歷史記錄出錯: ", error);
-                container.innerHTML = `<div style="text-align: center; color: #FF3B30; padding: 40px;">載入失敗，請檢查權限或網絡：${error.message}</div>`;
-            }
-        }
-    </script>
-    <style>
-        * { box-sizing: border-box; }
-        body { 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
-            background: #F4F6F9; color: #1A1A1A; margin: 0; padding: 20px 40px; 
-            display: flex; flex-direction: column; align-items: center; min-height: 100vh;
-        }
-        .navbar {
-            width: 100%; max-width: 900px; display: flex; justify-content: space-between; align-items: center;
-            background: #FFFFFF; padding: 12px 25px; border-radius: 50px; box-shadow: 0 4px 20px rgba(0,0,0,0.03); margin-bottom: 30px;
-        }
-        .nav-logo { font-weight: bold; font-size: 18px; color: #1A1A1A; display: flex; align-items: center; gap: 8px; }
-        .main-container { width: 100%; max-width: 900px; display: flex; flex-direction: column; gap: 15px; }
-        .history-card {
-            background: #FFFFFF; border-radius: 20px; padding: 20px 25px; border: 1px solid #E4E6EB;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.03); display: flex; flex-direction: column; gap: 10px;
-        }
-        .history-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #F4F6F9; padding-bottom: 10px; }
-        .history-time { font-size: 13px; color: #65676B; font-weight: bold; }
-        .history-sc-badge { background: #E8F0FE; color: #0066FF; font-size: 12px; font-weight: bold; padding: 4px 10px; border-radius: 8px; }
-        .history-body { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
-        .history-info { color: #333333; }
-    </style>
+    <meta http-equiv="refresh" content="0; url=index.html#record">
 </head>
-<body>
-
-    <div class="navbar">
-        <div class="nav-logo">
-            <span style="color: #0066FF; font-size: 20px;">✦</span> 歷史直播 Record
-        </div>
-        <div>
-            <a href="index.html" style="font-size: 13px; color: #1A1A1A; text-decoration: none; font-weight: bold; background: #F4F6F9; padding: 6px 14px; border-radius: 10px; border: 1px solid #E4E6EB;">⬅️ 返回主面板</a>
-        </div>
-    </div>
-
-    <div class="main-container" id="historyContainer">
-        <!-- 歷史卡片會動態加載到這裡 -->
-    </div>
-
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; text-align: center; padding: 60px 20px; color: #1A1A1A;">
+    <p>歷史直播 Record 而家已經整合入主頁面嘅「Record / Report」分頁。</p>
+    <p><a href="index.html">如果冇自動跳轉，按呢度前往主頁面</a></p>
 </body>
 </html>

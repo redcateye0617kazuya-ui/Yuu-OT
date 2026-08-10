@@ -2,700 +2,110 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>雲端加班台 Dashboard</title>
-    <!-- 引入 Firebase SDK (v10 模組化版本) -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-
-        // ==========================================
-        // Firebase 設定配置
-        // ==========================================
-        const firebaseConfig = {
-            apiKey: "AIzaSyCO1i0d_c7EO4jonhTx7ylib2-xAEbLa5M",
-            authDomain: "overtime-dashboard.firebaseapp.com",
-            projectId: "overtime-dashboard",
-            storageBucket: "overtime-dashboard.firebasestorage.app",
-            messagingSenderId: "442932326873",
-            appId: "1:442932326873:web:18a57cdfc48d31b62369c8"
-        };
-
-        // 初始化 Firebase
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-
-        let timerInterval = null;
-        let scPollInterval = null;
-        const docRef = doc(db, "streams", "current_stream");
-
-        window.addEventListener('DOMContentLoaded', async () => {
-            setupRealtimeSync();
-            updateHKClockAndCalendar();
-            setInterval(updateHKClockAndCalendar, 1000);
-            loadHistoryRecords();
-        });
-
-        // 實時監聽雲端資料
-        function setupRealtimeSync() {
-            onSnapshot(docRef, async (docSnap) => {
-                if (docSnap.exists()) {
-                    const data = docSnap.data();
-                    
-                    if (data.videoUrl) {
-                        document.getElementById('video_url').value = data.videoUrl;
-                    }
-                    if (data.ytApiKey) {
-                        document.getElementById('yt_api_key').value = data.ytApiKey;
-                    }
-                    
-                    if (data.status === "running" || data.status === "paused" || data.status === "cutoff") {
-                        window.serverTargetEndTime = data.targetEndTime;
-                        window.serverStartTime = data.startTime;
-                        window.serverIsPaused = data.isPaused;
-                        window.serverStatus = data.status;
-
-                        if (data.status === "running") {
-                            document.getElementById("statusBox").innerHTML = `狀態：已綁定 (${data.videoId || 'Live'})`;
-                            document.getElementById("pauseBtn").style.display = "inline-block";
-                            document.getElementById("pauseBtn").innerText = "暫停";
-                            document.getElementById("timerStateDesc").innerText = "雲端倒數中";
-                            if (!timerInterval) timerInterval = setInterval(updateCountdown, 1000);
-                            
-                            if (data.liveChatId && data.ytApiKey && !scPollInterval) {
-                                startScPolling(data.liveChatId, data.ytApiKey);
-                            }
-                        } else if (data.status === "paused") {
-                            document.getElementById("statusBox").innerHTML = `狀態：已暫停`;
-                            document.getElementById("pauseBtn").style.display = "inline-block";
-                            document.getElementById("pauseBtn").innerText = "繼續";
-                            document.getElementById("timerStateDesc").innerText = "雲端已暫停";
-                            if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
-                            if (scPollInterval) { clearInterval(scPollInterval); scPollInterval = null; }
-                            displayPausedTime(data.pausedRemainingMs);
-                        } else if (data.status === "cutoff") {
-                            document.getElementById("statusBox").innerHTML = `狀態：已埋數 (等待新Link)`;
-                            document.getElementById("timerStateDesc").innerText = "已埋數運行中";
-                            document.getElementById("pauseBtn").style.display = "none";
-                            if (!timerInterval) timerInterval = setInterval(updateCountdown, 1000);
-                            if (scPollInterval) { clearInterval(scPollInterval); scPollInterval = null; }
-                        }
-                    } else if (data.status === "reset") {
-                        resetUIState();
-                    }
-
-                    if (data.scEvents) {
-                        renderSCards(data.scEvents);
-                    }
-                }
-            });
-        }
-
-        // 取得 YouTube 標題與封面
-        async function fetchYouTubeInfo(videoUrl, videoId) {
-            let title = "YouTube 直播節目";
-            let thumbnail = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
-
-            try {
-                const response = `https://www.youtube.com/oembed?url=${encodeURIComponent(videoUrl)}&format=json`;
-                const res = await fetch(response);
-                if (res.ok) {
-                    const info = await res.json();
-                    if (info.title) title = info.title;
-                    if (info.thumbnail_url) thumbnail = info.thumbnail_url;
-                }
-            } catch (e) {
-                console.log("使用預設封面與標題");
-            }
-            return { title, thumbnail };
-        }
-
-        // 透過 YouTube API 取得直播的 liveChatId
-        async function fetchLiveChatId(videoId, apiKey) {
-            try {
-                const url = `https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails&id=${videoId}&key=${apiKey}`;
-                console.log("正在請求 YouTube API:", url);
-                
-                const res = await fetch(url);
-                const data = await res.json();
-                
-                console.log("YouTube API 回應資料:", data);
-
-                if (data.error) {
-                    console.error("YouTube API 發生錯誤:", data.error.message);
-                    alert("YouTube API 錯誤: " + data.error.message);
-                    return null;
-                }
-
-                if (data.items && data.items.length > 0) {
-                    const chatId = data.items[0].liveStreamingDetails?.activeLiveChatId;
-                    if (!chatId) {
-                        console.warn("此影片沒有 activeLiveChatId，可能並非直播，或直播已結束/未啟用聊天室。");
-                    }
-                    return chatId || null;
-                }
-            } catch (e) {
-                console.error("獲取 liveChatId 網絡異常:", e);
-            }
-            return null;
-        }
-
-        // 開始輪詢真實 YouTube Super Chat 訊息
-        function startScPolling(liveChatId, apiKey) {
-            if (scPollInterval) clearInterval(scPollInterval);
-            
-            let nextPageToken = null;
-
-            async function poll() {
-                try {
-                    let url = `https://www.googleapis.com/youtube/v3/liveChat/messages?liveChatId=${liveChatId}&part=snippet,authorDetails&key=${apiKey}`;
-                    if (nextPageToken) {
-                        url += `&pageToken=${nextPageToken}`;
-                    }
-
-                    const res = await fetch(url);
-                    if (!res.ok) return;
-                    const data = await res.json();
-
-                    if (data.nextPageToken) {
-                        nextPageToken = data.nextPageToken;
-                    }
-
-                    if (data.items && data.items.length > 0) {
-                        let newScFound = false;
-                        const snap = await getDoc(docRef);
-                        if (!snap.exists()) return;
-                        let currentData = snap.data();
-                        let existingEvents = currentData.scEvents || [];
-                        
-                        const existingIds = new Set(existingEvents.map(e => e.id));
-
-                        data.items.forEach(item => {
-                            if (item.snippet.type === 'superChatEvent') {
-                                const scDetails = item.snippet.superChatDetails;
-                                const author = item.authorDetails.displayName;
-                                const amountFormatted = scDetails.amountDisplayString;
-                                const rawAmount = scDetails.amountMicros ? (scDetails.amountMicros / 1000000) : 0;
-                                const eventId = item.id;
-
-                                if (!existingIds.has(eventId)) {
-                                    existingEvents.push({
-                                        id: eventId,
-                                        time: new Date(item.snippet.publishedAt).toLocaleTimeString("en-US", { timeZone: "Asia/Hong_Kong", hour12: false }),
-                                        name: author,
-                                        amount: rawAmount > 0 ? rawAmount : amountFormatted
-                                    });
-                                    newScFound = true;
-                                }
-                            }
-                        });
-
-                        if (newScFound) {
-                            await updateDoc(docRef, { scEvents: existingEvents });
-                        }
-                    }
-                } catch (e) {
-                    console.error("輪詢 SC 出錯:", e);
-                }
-            }
-
-            poll();
-            scPollInterval = setInterval(poll, 10000);
-        }
-
-        // 開始計時
-        async function startTimer() {
-            const snap = await getDoc(docRef);
-            if (snap.exists()) {
-                const currentData = snap.data();
-                if (currentData.status === "running" || currentData.status === "paused") {
-                    alert("當前直播尚未 Cut Off 埋數，禁止直接更換連結！");
-                    return;
-                }
-            }
-
-            const videoUrl = document.getElementById("video_url").value.trim();
-            const apiKey = document.getElementById("yt_api_key").value.trim();
-
-            let videoId = "";
-            if (videoUrl.includes("youtu.be/")) {
-                videoId = videoUrl.split("youtu.be/")[1].split("?")[0];
-            } else if (videoUrl.includes("watch?v=")) {
-                videoId = videoUrl.split("watch?v=")[1].split("&")[0];
-            }
-
-            if (!videoId && !videoUrl) {
-                alert("請輸入有效的 YouTube 連結！");
-                return;
-            }
-
-            if (!apiKey) {
-                alert("請先輸入你的 YouTube Data API Key！");
-                return;
-            }
-
-            const ytInfo = await fetchYouTubeInfo(videoUrl, videoId);
-            const liveChatId = await fetchLiveChatId(videoId, apiKey);
-
-            if (!liveChatId) {
-                alert("警告：無法獲取該直播的 LiveChatId。請確保輸入的是正在進行中的 YouTube 直播連結，且你的 API Key 有效。");
-            }
-
-            const hoursToAdd = parseFloat(document.getElementById("duration").value);
-            const now = Date.now();
-            const targetEndTime = now + (hoursToAdd * 60 * 60 * 1000);
-            const streamId = now;
-
-            await setDoc(docRef, {
-                videoUrl: videoUrl,
-                videoId: videoId,
-                videoTitle: ytInfo.title,
-                thumbnailUrl: ytInfo.thumbnail,
-                ytApiKey: apiKey,
-                liveChatId: liveChatId || "",
-                startTime: now,
-                targetEndTime: targetEndTime,
-                status: "running",
-                isPaused: false,
-                pausedRemainingMs: 0,
-                streamId: streamId,
-                scEvents: []
-            });
-
-            alert("成功啟動雲端計時！");
-        }
-
-        // 暫停/繼續
-        async function togglePauseTimer() {
-            const snap = await getDoc(docRef);
-            if (!snap.exists()) return;
-            const data = snap.data();
-            if (data.status === "cutoff") {
-                alert("當前已進入埋數狀態，無法暫停。");
-                return;
-            }
-
-            if (!data.isPaused) {
-                const remaining = data.targetEndTime - Date.now();
-                await updateDoc(docRef, {
-                    status: "paused",
-                    isPaused: true,
-                    pausedRemainingMs: remaining > 0 ? remaining : 0
-                });
-            } else {
-                const newTarget = Date.now() + data.pausedRemainingMs;
-                await updateDoc(docRef, {
-                    status: "running",
-                    isPaused: false,
-                    targetEndTime: newTarget,
-                    pausedRemainingMs: 0
-                });
-            }
-        }
-
-        // Cut Off 埋數
-        async function cutOffTimer() {
-            if (confirm("確定要進行「直播埋數」嗎？")) {
-                if (scPollInterval) { clearInterval(scPollInterval); scPollInterval = null; }
-                
-                const snap = await getDoc(docRef);
-                if (snap.exists()) {
-                    const data = snap.data();
-                    const now = Date.now();
-                    const elapsedMs = data.startTime ? (now - data.startTime) : 0;
-                    
-                    const elHours = Math.floor((elapsedMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-                    const elMinutes = Math.floor((elapsedMs % (1000 * 60 * 60)) / (1000 * 60));
-                    const elSeconds = Math.floor((elapsedMs % (1000 * 60)) / 1000);
-                    const totalElapsedStr = `${String(elHours).padStart(2, '0')}:${String(elMinutes).padStart(2, '0')}:${String(elSeconds).padStart(2, '0')}`;
-
-                    let totalSc = 0;
-                    if (data.scEvents) {
-                        data.scEvents.forEach(sc => { totalSc += parseFloat(sc.amount) || 0; });
-                    }
-
-                    try {
-                        await addDoc(collection(db, "history"), {
-                            videoUrl: data.videoUrl || "",
-                            videoId: data.videoId || "Unknown",
-                            videoTitle: data.videoTitle || "YouTube 直播節目",
-                            thumbnailUrl: data.thumbnailUrl || `https://img.youtube.com/vi/${data.videoId}/hqdefault.jpg`,
-                            totalElapsed: totalElapsedStr,
-                            totalScAmount: totalSc,
-                            cutoffTime: new Date().toLocaleString("en-US", { timeZone: "Asia/Hong_Kong" }),
-                            scEvents: data.scEvents || []
-                        });
-                        loadHistoryRecords();
-                    } catch (e) {
-                        console.error("寫入歷史記錄失敗: ", e);
-                        alert("寫入歷史記錄失敗：" + e.message + "\n（請檢查 Firestore Rules 是否有開放 history collection 的寫入權限）");
-                    }
-                }
-
-                await updateDoc(docRef, {
-                    status: "cutoff",
-                    isPaused: false
-                });
-                alert("埋數成功！");
-            }
-        }
-
-        // 重設
-        async function resetTimer() {
-            if (confirm("確定要重設計時嗎？")) {
-                if (scPollInterval) { clearInterval(scPollInterval); scPollInterval = null; }
-                await setDoc(docRef, {
-                    status: "reset",
-                    videoUrl: "",
-                    targetEndTime: Date.now(),
-                    scEvents: []
-                });
-            }
-        }
-
-        function resetUIState() {
-            if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
-            if (scPollInterval) { clearInterval(scPollInterval); scPollInterval = null; }
-            document.getElementById("countdown").innerHTML = "04:30:00";
-            document.getElementById("timerStateDesc").innerText = "雲端待機中";
-            document.getElementById("elapsedBox").innerText = "總直播累積：00:00:00";
-            document.getElementById("statusBox").innerHTML = "狀態：未開始";
-            document.getElementById("pauseBtn").style.display = "none";
-            document.getElementById("scCardListContainer").innerHTML = `<div style="text-align: center; color: #65676B; font-size: 12px;">等待真實 SC 進入中...</div>`;
-            document.getElementById("totalScBadge").innerText = "總計: $HKD 0";
-        }
-
-        function displayPausedTime(ms) {
-            if (ms < 0) ms = 0;
-            const hours = Math.floor((ms % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-            const minutes = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
-            const seconds = Math.floor((ms % (1000 * 60)) / 1000);
-            document.getElementById("countdown").innerHTML = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-        }
-
-        // 倒數計時
-        function updateCountdown() {
-            if (!window.serverTargetEndTime || window.serverIsPaused) return;
-
-            const now = Date.now();
-            const elapsedMs = now - window.serverStartTime;
-            
-            const elHours = Math.floor((elapsedMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-            const elMinutes = Math.floor((elapsedMs % (1000 * 60 * 60)) / (1000 * 60));
-            const elSeconds = Math.floor((elapsedMs % (1000 * 60)) / 1000);
-            document.getElementById("elapsedBox").innerText = `總直播累積：${String(elHours).padStart(2, '0')}:${String(elMinutes).padStart(2, '0')}:${String(elSeconds).padStart(2, '0')}`;
-
-            const distance = window.serverTargetEndTime - now;
-            const countdownElem = document.getElementById("countdown");
-
-            if (distance <= 0) {
-                countdownElem.innerHTML = "00:00:00";
-            } else {
-                const h = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-                const m = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-                const s = Math.floor((distance % (1000 * 60)) / 1000);
-                countdownElem.innerHTML = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-            }
-        }
-
-        function renderSCards(scEvents) {
-            const container = document.getElementById("scCardListContainer");
-            container.innerHTML = "";
-            let total = 0;
-
-            if (!scEvents || scEvents.length === 0) {
-                container.innerHTML = `<div style="text-align: center; color: #65676B; font-size: 12px; padding: 20px;">等待真實 Super Chat 進入中...</div>`;
-                document.getElementById("totalScBadge").innerText = "總計: $HKD 0";
-                return;
-            }
-
-            scEvents.forEach(sc => {
-                total += parseFloat(sc.amount) || 0;
-                let card = document.createElement("div");
-                card.className = "sc-card";
-                card.innerHTML = `
-                    <span class="sc-name">${sc.name}</span>
-                    <span class="sc-amount">${typeof sc.amount === 'number' ? '$HKD ' + sc.amount : sc.amount}</span>
-                `;
-                container.appendChild(card);
-            });
-            document.getElementById("totalScBadge").innerText = `總計: $HKD ${total}`;
-        }
-
-        async function loadHistoryRecords() {
-            const container = document.getElementById("recordContainerList");
-            if (!container) return;
-            container.innerHTML = `<div style="text-align: center; color: #65676B; padding: 20px;">載入歷史紀錄中...</div>`;
-
-            try {
-                const querySnapshot = await getDocs(collection(db, "history"));
-                container.innerHTML = "";
-
-                if (querySnapshot.empty) {
-                    container.innerHTML = `<div style="text-align: center; color: #65676B; padding: 30px;">暫時未有任何直播紀錄</div>`;
-                    return;
-                }
-
-                let docsArray = [];
-                querySnapshot.forEach((doc) => { docsArray.push(doc.data()); });
-                docsArray.reverse();
-
-                docsArray.forEach(data => {
-                    let card = document.createElement("div");
-                    card.className = "record-item-card";
-
-                    let scRows = "";
-                    if (data.scEvents && data.scEvents.length > 0) {
-                        data.scEvents.forEach(sc => {
-                            scRows += `
-                                <div style="display: flex; justify-content: space-between; padding: 6px 10px; border-bottom: 1px solid #F4F6F9; font-size: 12px;">
-                                    <span style="color: #65676B;">${sc.time || ''} - <strong>${sc.name}</strong></span>
-                                    <span style="color: #0066FF; font-weight: bold;">${typeof sc.amount === 'number' ? '$HKD ' + sc.amount : sc.amount}</span>
-                                </div>
-                            `;
-                        });
-                    } else {
-                        scRows = `<div style="text-align: center; color: #65676B; font-size: 12px; padding: 6px;">此場無 SC 紀錄</div>`;
-                    }
-
-                    card.innerHTML = `
-                        <div style="display: flex; gap: 15px; align-items: flex-start; flex-wrap: wrap;">
-                            <img src="${data.thumbnailUrl || ''}" alt="封面" style="width: 160px; height: 90px; object-fit: cover; border-radius: 12px; border: 1px solid #E4E6EB;">
-                            <div style="flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 4px;">
-                                <div style="font-size: 15px; font-weight: bold; color: #1A1A1A;">${data.videoTitle || 'YouTube 直播節目'}</div>
-                                <div style="font-size: 12px; color: #65676B;">埋數時間：${data.cutoffTime || ''}</div>
-                                <div style="font-size: 12px; color: #0066FF; font-weight: bold;">總時長：${data.totalElapsed || '00:00:00'} ｜ SC 總額：$HKD ${data.totalScAmount || 0}</div>
-                                <div style="margin-top: 4px;"><a href="${data.videoUrl}" target="_blank" style="font-size: 11px; color: #0066FF; text-decoration: none;">觀看 YouTube 連結</a></div>
-                            </div>
-                        </div>
-                        <div style="margin-top: 15px; background: #FAFBFC; border: 1px solid #E4E6EB; border-radius: 12px; padding: 8px;">
-                            <div style="font-size: 11px; font-weight: bold; color: #65676B; margin-bottom: 6px; padding-left: 4px;">Super Chat 詳細列表：</div>
-                            ${scRows}
-                        </div>
-                    `;
-                    container.appendChild(card);
-                });
-            } catch (e) {
-                console.error("載入 Record 失敗", e);
-                container.innerHTML = `<div style="text-align: center; color: #FF3B30; padding: 20px;">載入記錄出錯：${e.message}</div>`;
-            }
-        }
-
-        function switchTab(tabName) {
-            const dashboardView = document.getElementById("dashboardView");
-            const recordView = document.getElementById("recordView");
-            const tabDashboardBtn = document.getElementById("tabDashboardBtn");
-            const tabRecordBtn = document.getElementById("tabRecordBtn");
-
-            if (tabName === 'dashboard') {
-                dashboardView.style.display = "grid";
-                recordView.style.display = "none";
-                tabDashboardBtn.style.background = "#1A1A1A";
-                tabDashboardBtn.style.color = "#FFFFFF";
-                tabRecordBtn.style.background = "#F4F6F9";
-                tabRecordBtn.style.color = "#1A1A1A";
-            } else {
-                dashboardView.style.display = "none";
-                recordView.style.display = "block";
-                tabRecordBtn.style.background = "#1A1A1A";
-                tabRecordBtn.style.color = "#FFFFFF";
-                tabDashboardBtn.style.background = "#F4F6F9";
-                tabDashboardBtn.style.color = "#1A1A1A";
-                loadHistoryRecords();
-            }
-        }
-
-        function updateHKClockAndCalendar() {
-            const now = new Date();
-            const hkTimeStr = now.toLocaleString("en-US", { timeZone: "Asia/Hong_Kong" });
-            const hkDate = new Date(hkTimeStr);
-
-            document.getElementById("hk-realtime").innerText = hkDate.toTimeString().split(' ')[0];
-            document.getElementById("hk-realdate").innerText = hkDate.toISOString().split('T')[0];
-
-            const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-            document.getElementById("current-month-year").innerText = monthNames[hkDate.getMonth()];
-
-            const container = document.getElementById("calendar-days-container");
-            if (container) {
-                container.innerHTML = "";
-                let currentDayOfWeek = hkDate.getDay();
-                let sunday = new Date(hkDate);
-                sunday.setDate(hkDate.getDate() - currentDayOfWeek);
-                const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-                for (let i = 0; i < 7; i++) {
-                    let d = new Date(sunday);
-                    d.setDate(sunday.getDate() + i);
-                    let isToday = d.toDateString() === hkDate.toDateString();
-                    let dayDiv = document.createElement("div");
-                    dayDiv.className = `cal-day-item ${isToday ? 'active' : ''}`;
-                    dayDiv.innerHTML = `
-                        <div style="font-size: 9px;">${dayNames[i]}</div>
-                        <div class="day-num">${String(d.getDate()).padStart(2, '0')}</div>
-                    `;
-                    container.appendChild(dayDiv);
-                }
-            }
-        }
-
-        window.startTimer = startTimer;
-        window.togglePauseTimer = togglePauseTimer;
-        window.cutOffTimer = cutOffTimer;
-        window.resetTimer = resetTimer;
-        window.switchTab = switchTab;
-    </script>
-    <style>
-        * { box-sizing: border-box; }
-        body { 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
-            background: #F4F6F9; color: #1A1A1A; margin: 0; padding: 20px 40px; 
-            display: flex; flex-direction: column; align-items: center; min-height: 100vh;
-        }
-        .navbar {
-            width: 100%; max-width: 1200px; display: flex; justify-content: space-between; align-items: center;
-            background: #FFFFFF; padding: 12px 25px; border-radius: 50px; box-shadow: 0 4px 20px rgba(0,0,0,0.03); margin-bottom: 30px;
-        }
-        .nav-logo { font-weight: bold; font-size: 18px; color: #1A1A1A; display: flex; align-items: center; gap: 8px; }
-        .nav-tabs { display: flex; gap: 8px; }
-        .tab-btn {
-            padding: 8px 16px; border-radius: 20px; border: 1px solid #E4E6EB; background: #F4F6F9; 
-            color: #1A1A1A; font-size: 12px; font-weight: bold; cursor: pointer; transition: all 0.2s;
-        }
-        .dashboard-grid { width: 100%; max-width: 1200px; display: grid; grid-template-columns: 360px 320px 450px; gap: 25px; }
-        .control-bar {
-            grid-column: 1 / -1; background: #FFFFFF; padding: 15px 25px; border-radius: 20px;
-            display: flex; gap: 12px; align-items: center; box-shadow: 0 4px 20px rgba(0,0,0,0.03); border: 1px solid #E4E6EB; flex-wrap: wrap;
-        }
-        .control-bar input, .control-bar select {
-            padding: 10px 14px; border-radius: 10px; border: 1px solid #E4E6EB; background: #F4F6F9; color: #1A1A1A; font-size: 13px; outline: none;
-        }
-        .control-bar input[type="text"] { flex: 2; min-width: 180px; }
-        .control-bar select { flex: 1; min-width: 90px; }
-        .control-bar button { padding: 10px 16px; border-radius: 10px; border: none; font-weight: bold; cursor: pointer; font-size: 13px; }
-        .left-section {
-            background: #FFFFFF; border-radius: 24px; padding: 30px; display: flex; flex-direction: column;
-            align-items: center; justify-content: center; box-shadow: 0 4px 20px rgba(0,0,0,0.03); border: 1px solid #E4E6EB; text-align: center;
-        }
-        .timer-circle {
-            width: 220px; height: 220px; border-radius: 50%; border: 8px solid #1A1A1A;
-            display: flex; flex-direction: column; align-items: center; justify-content: center; background: #FFFFFF;
-            box-shadow: inset 0 5px 15px rgba(0,0,0,0.05); margin-bottom: 15px;
-        }
-        .timer-circle span { font-size: 26px; color: #1A1A1A; font-weight: bold; letter-spacing: 1px; }
-        .status-text { font-size: 13px; color: #65676B; margin-top: 5px; }
-        .elapsed-text { font-size: 12px; color: #0066FF; font-weight: bold; margin-top: 8px; }
-        .middle-section { display: flex; flex-direction: column; gap: 20px; }
-        .calendar-widget-split {
-            background: #FFFFFF; padding: 15px; border-radius: 20px; border: 1px solid #E4E6EB;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.03); display: flex; align-items: center; gap: 12px;
-        }
-        .cal-month-box { background: #F4F6F9; padding: 15px 12px; border-radius: 14px; text-align: center; min-width: 90px; border: 1px solid #E4E6EB; }
-        .cal-month-box .month-name { font-size: 14px; font-weight: bold; color: #1A1A1A; margin-top: 2px; }
-        .cal-days-right { display: flex; gap: 5px; justify-content: space-between; flex-grow: 1; }
-        .cal-day-item {
-            text-align: center; padding: 8px 4px; border-radius: 12px; font-size: 10px; color: #65676B;
-            background: #F4F6F9; flex: 1; border: 1px solid #E4E6EB;
-        }
-        .cal-day-item.active { background: #1A1A1A; color: #FFFFFF; font-weight: bold; border-color: #1A1A1A; }
-        .cal-day-item .day-num { font-size: 13px; font-weight: bold; color: #1A1A1A; margin-top: 3px; }
-        .cal-day-item.active .day-num { color: #FFFFFF; }
-        .widget-box { background: #FFFFFF; padding: 22px; border-radius: 20px; border: 1px solid #E4E6EB; box-shadow: 0 4px 20px rgba(0,0,0,0.03); text-align: center; }
-        .right-section {
-            background: #FFFFFF; border-radius: 24px; padding: 22px; border: 1px solid #E4E6EB;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.03); display: flex; flex-direction: column; gap: 12px;
-        }
-        .right-section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
-        .right-section h3 { margin: 0; color: #1A1A1A; font-size: 15px; }
-        .total-sc-badge { background: #E8F0FE; color: #0066FF; font-size: 11px; font-weight: bold; padding: 4px 8px; border-radius: 8px; }
-        .sc-card {
-            background: #F4F6F9; padding: 14px 18px; border-radius: 14px; display: flex; justify-content: space-between;
-            align-items: center; border-left: 5px solid #0066FF; border: 1px solid #E4E6EB;
-        }
-        .sc-name { font-weight: bold; font-size: 13px; color: #1A1A1A; }
-        .sc-amount { color: #0066FF; font-weight: bold; font-size: 13px; }
-        
-        .record-container {
-            width: 100%; max-width: 900px; display: flex; flex-direction: column; gap: 20px; display: none;
-        }
-        .record-item-card {
-            background: #FFFFFF; border-radius: 20px; padding: 20px; border: 1px solid #E4E6EB;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.03); display: flex; flex-direction: column; gap: 12px;
-        }
-    </style>
+    <link rel="stylesheet" href="style.css">
+    <script type="module" src="app.js"></script>
 </head>
 <body>
 
     <div class="navbar">
         <div class="nav-logo">
-            <span style="color: #0066FF; font-size: 20px;">✦</span> 雲端加班台 Dashboard
+            <span style="color: #0066FF; font-size: 20px;">✦</span> 雲端加班台
         </div>
         <div class="nav-tabs">
-            <button class="tab-btn" id="tabDashboardBtn" onclick="switchTab('dashboard')" style="background: #1A1A1A; color: #FFFFFF;">主控台</button>
-            <button class="tab-btn" id="tabRecordBtn" onclick="switchTab('record')">歷史 Record 列表</button>
+            <button class="tab-btn active" data-tab="dashboard">主控台</button>
+            <button class="tab-btn" data-tab="record">Record / Report</button>
+            <button class="tab-btn" data-tab="rule">Rule Setting</button>
+            <button class="tab-btn" data-tab="wheel">輪盤</button>
         </div>
-        <div style="font-size: 12px; color: #65676B;">實時 API 抓取模式</div>
     </div>
 
-    <!-- 主控台頁面 -->
-    <div class="dashboard-grid" id="dashboardView">
-        <div class="control-bar">
-            <input type="text" id="video_url" placeholder="請輸入 YouTube 直播 Link..." required>
-            <input type="text" id="yt_api_key" placeholder="輸入 YouTube Data API Key..." style="flex: 1.2; min-width: 150px;">
+    <!-- ============ Dashboard ============ -->
+    <div class="page-view dashboard-grid" id="dashboardView">
+        <div class="control-bar" style="grid-column: 1 / -1;">
+            <input type="text" id="video_url" placeholder="請輸入 YouTube 直播 Link...">
+            <input type="text" id="yt_api_key" placeholder="輸入 YouTube Data API Key...">
             <select id="duration">
-                <option value="2">2H</option>
-                <option value="2.5">2.5H</option>
-                <option value="3">3H</option>
-                <option value="3.5">3.5H</option>
-                <option value="4">4H</option>
-                <option value="4.5" selected>4.5H</option>
-                <option value="480">480H (20日測試)</option>
+                <option value="24">1日 (24H)</option>
+                <option value="48">2日 (48H)</option>
+                <option value="120">5日 (120H)</option>
+                <option value="240">10日 (240H)</option>
+                <option value="480" selected>20日 (480H)</option>
             </select>
-            <button type="button" onclick="startTimer()" style="background: #0066FF; color: #FFFFFF;">Start</button>
-            <button type="button" id="pauseBtn" onclick="togglePauseTimer()" style="background: #FF9500; color: #FFFFFF; display: none;">暫停</button>
-            <button type="button" onclick="cutOffTimer()" style="background: #5856D6; color: #FFFFFF;">Cut Off 埋數</button>
-            <button type="button" onclick="resetTimer()" style="background: #F4F6F9; color: #1A1A1A; border: 1px solid #E4E6EB;">重設</button>
+            <button type="button" id="startBtn" style="background: #0066FF; color: #FFFFFF;">開始 / 換Link</button>
+            <button type="button" id="pauseBtn" style="background: #FF9500; color: #FFFFFF; display: none;">暫停</button>
+            <button type="button" id="cutoffBtn" style="background: #5856D6; color: #FFFFFF; display: none;">Cut Off 埋數</button>
+            <button type="button" id="resetBtn" style="background: #F4F6F9; color: #1A1A1A; border: 1px solid #E4E6EB;">重設馬拉松</button>
         </div>
 
-        <div class="left-section">
+        <div class="panel timer-panel">
             <div class="timer-circle">
-                <span id="countdown">04:30:00</span>
-                <span style="font-size: 11px; color: #65676B; margin-top: 4px;" id="timerStateDesc">雲端待機中</span>
+                <span id="countdown">--:--:--</span>
             </div>
-            <div class="elapsed-text" id="elapsedBox">總直播累積：00:00:00</div>
+            <div class="time-adjust-row">
+                <button type="button" class="time-adjust-btn" data-delta-ms="-3600000">-1H</button>
+                <button type="button" class="time-adjust-btn" data-delta-ms="-600000">-10M</button>
+                <button type="button" class="time-adjust-btn" data-delta-ms="600000">+10M</button>
+                <button type="button" class="time-adjust-btn" data-delta-ms="3600000">+1H</button>
+            </div>
+            <div class="time-info-box" id="startTimeBox">開始時間：--</div>
+            <div class="time-info-box" id="endTimeBox">收工時間：--</div>
             <div class="status-text" id="statusBox">狀態：未開始</div>
         </div>
 
-        <div class="middle-section">
-            <div class="calendar-widget-split">
-                <div class="cal-month-box">
-                    <div style="font-size: 10px; color: #65676B;">Month</div>
-                    <div class="month-name" id="current-month-year">July</div>
-                </div>
-                <div class="cal-days-right" id="calendar-days-container"></div>
+        <div class="panel payme-panel">
+            <h3>PayMe 手動輸入</h3>
+            <div class="payme-form">
+                <input type="text" id="payme_name" placeholder="課金用戶名">
+                <input type="number" id="payme_amount" placeholder="金額 (HKD)">
+                <button type="button" id="addPaymeBtn">加入 PayMe 記錄</button>
             </div>
-
-            <div class="widget-box">
-                <h4 style="margin: 0 0 8px 0; color: #1A1A1A; font-size: 14px;">香港即時時間</h4>
-                <div style="font-weight: bold; color: #0066FF; font-size: 20px; letter-spacing: 1px;" id="hk-realtime">--:--:--</div>
-                <div style="font-size: 11px; color: #65676B; margin-top: 4px;" id="hk-realdate">----/--/--</div>
-            </div>
+            <div class="total-amount-badge" id="totalAmountBox">Total：$HKD 0</div>
         </div>
 
-        <div class="right-section">
-            <div class="right-section-header">
-                <h3>實時 SC 排行榜</h3>
-                <div class="total-sc-badge" id="totalScBadge">總計: $HKD 0</div>
+        <div class="leaderboard-stack">
+            <div class="panel">
+                <h3>SuperChat 金主榜</h3>
+                <div id="scLeaderboard"><div class="empty-hint">暫時未有紀錄</div></div>
             </div>
-            <div id="scCardListContainer" style="display: flex; flex-direction: column; gap: 8px;">
-                <div style="text-align: center; color: #65676B; font-size: 12px; padding: 20px;">等待真實 SC 進入中...</div>
+            <div class="panel">
+                <h3>PayMe 榜</h3>
+                <div id="paymeLeaderboard"><div class="empty-hint">暫時未有紀錄</div></div>
             </div>
-            <div style="text-align: center; font-size: 11px; color: #65676B; margin-top: auto;">連線狀態：YouTube API 實時監聽中</div>
         </div>
     </div>
 
-    <!-- 歷史 Record 列表頁面 -->
-    <div class="record-container" id="recordView">
-        <h2 style="margin: 0 0 10px 0; font-size: 18px; color: #1A1A1A;">歷史直播 Record 列表</h2>
-        <div id="recordContainerList" style="display: flex; flex-direction: column; gap: 15px;"></div>
+    <!-- ============ Record / Report ============ -->
+    <div class="page-view" id="recordView" style="display: none;">
+        <div class="record-header">
+            <h2>歷史直播 Record</h2>
+            <div class="total-amount-badge" id="recordTotalAmount">Total：$HKD 0</div>
+        </div>
+        <div class="session-list" id="sessionListContainer"></div>
+    </div>
+
+    <!-- ============ Rule Setting ============ -->
+    <div class="page-view" id="ruleView" style="display: none;">
+        <div class="panel">
+            <h3>加鐘規則設定</h3>
+            <div class="rule-form">
+                <input type="number" id="ruleMin" placeholder="金額下限 ($)">
+                <input type="number" id="ruleMax" placeholder="金額上限 (留空=無上限)">
+                <input type="number" id="ruleInterval" placeholder="每 $ 幾多">
+                <input type="number" id="ruleHours" placeholder="加幾多小時" value="1">
+                <button type="button" id="addRuleBtn">新增規則</button>
+            </div>
+            <div id="ruleListContainer"><div class="empty-hint">未設定任何規則</div></div>
+        </div>
+    </div>
+
+    <!-- ============ 輪盤 ============ -->
+    <div class="page-view" id="wheelView" style="display: none;">
+        <div class="wheel-toolbar">
+            <button type="button" id="addWheelBtn">➕ 新增輪盤</button>
+        </div>
+        <div id="wheelListContainer"><div class="empty-hint">未有任何輪盤，按上面「新增輪盤」開始</div></div>
     </div>
 
 </body>
