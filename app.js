@@ -607,17 +607,17 @@ function drawWheel(canvas, items) {
         ctx.rotate(flipped ? midAngle + Math.PI : midAngle);
         ctx.textAlign = flipped ? "left" : "right";
         ctx.fillStyle = "#FFFFFF";
-        ctx.font = "bold 15px sans-serif";
-        const label = item.label.length > 12 ? item.label.slice(0, 12) + "…" : item.label;
-        ctx.fillText(label, flipped ? -(r - 16) : (r - 16), 5);
+        ctx.font = "bold 17px sans-serif";
+        const label = item.label.length > 14 ? item.label.slice(0, 14) + "…" : item.label;
+        ctx.fillText(label, flipped ? -(r - 20) : (r - 20), 6);
         ctx.restore();
     });
     ctx.restore();
 
     ctx.beginPath();
-    ctx.moveTo(cx - 12, 8);
-    ctx.lineTo(cx + 12, 8);
-    ctx.lineTo(cx, 32);
+    ctx.moveTo(cx - 14, 10);
+    ctx.lineTo(cx + 14, 10);
+    ctx.lineTo(cx, 36);
     ctx.closePath();
     ctx.fillStyle = "#1A1A1A";
     ctx.fill();
@@ -649,21 +649,21 @@ function buildWheelBlock(wheel) {
             <div class="wheel-items-col">
                 <div class="wheel-item-add-row">
                     <input type="text" placeholder="項目名稱" class="wheel-item-label">
-                    <label class="wheel-item-toggle"><input type="checkbox" class="wheel-item-affects-timer" checked> 加鐘</label>
-                    <input type="number" placeholder="±分鐘" class="wheel-item-minutes">
+                    <label class="wheel-item-toggle"><input type="checkbox" class="wheel-item-affects-timer"> 加鐘</label>
+                    <input type="number" placeholder="±小時" class="wheel-item-hours" style="display:none;">
                     <button type="button" class="add-wheel-item-btn">加</button>
                 </div>
                 <div class="wheel-item-list">
                     ${items.map((it) => `
                         <div class="wheel-item-row" data-item-id="${it.id}">
-                            <span>${escapeHtml(it.label)}${it.effectMinutes != null ? `（${it.effectMinutes >= 0 ? "+" : ""}${it.effectMinutes}分鐘）` : ' <span class="no-effect-tag">（不影響時間）</span>'}</span>
+                            <span>${escapeHtml(it.label)}${it.effectHours != null ? `（${it.effectHours >= 0 ? "+" : ""}${it.effectHours}小時）` : ' <span class="no-effect-tag">（不影響時間）</span>'}</span>
                             <button type="button" class="del-btn del-item-btn">✕</button>
                         </div>
                     `).join("")}
                 </div>
             </div>
             <div class="wheel-canvas-col">
-                <canvas id="wheelCanvas_${wheel.id}" width="320" height="320"></canvas>
+                <canvas id="wheelCanvas_${wheel.id}" width="400" height="400"></canvas>
                 <button type="button" class="spin-btn">🎡 轉！</button>
             </div>
         </div>
@@ -672,7 +672,7 @@ function buildWheelBlock(wheel) {
             <div class="wheel-spin-list">
                 ${spins.length === 0 ? '<div class="empty-hint">未有轉過</div>' : spins.slice().reverse().map((s) => `
                     <div class="wheel-spin-row" data-spin-id="${s.id}">
-                        <span>${hkTimeString(s.timestamp)} - ${escapeHtml(s.resultLabel)}${s.effectMinutes != null ? `（${s.effectMinutes >= 0 ? "+" : ""}${s.effectMinutes}分鐘）` : ''}</span>
+                        <span>${hkTimeString(s.timestamp)} - ${escapeHtml(s.resultLabel)}${s.effectHours != null ? `（${s.effectHours >= 0 ? "+" : ""}${s.effectHours}小時）` : ''}</span>
                         <button type="button" class="del-btn del-spin-btn">✕</button>
                     </div>
                 `).join("")}
@@ -684,9 +684,9 @@ function buildWheelBlock(wheel) {
     block.querySelector(".del-wheel-btn").addEventListener("click", () => deleteWheel(wheel.id));
     block.querySelector(".add-wheel-item-btn").addEventListener("click", () => addWheelItem(wheel.id, block));
     const affectsCheckbox = block.querySelector(".wheel-item-affects-timer");
-    const minutesInputEl = block.querySelector(".wheel-item-minutes");
+    const hoursInputEl = block.querySelector(".wheel-item-hours");
     affectsCheckbox.addEventListener("change", () => {
-        minutesInputEl.style.display = affectsCheckbox.checked ? "" : "none";
+        hoursInputEl.style.display = affectsCheckbox.checked ? "" : "none";
     });
     block.querySelectorAll(".del-item-btn").forEach((btn) => {
         btn.addEventListener("click", () => deleteWheelItem(wheel.id, btn.closest(".wheel-item-row").dataset.itemId));
@@ -726,20 +726,20 @@ async function deleteWheel(wheelId) {
 async function addWheelItem(wheelId, blockEl) {
     const labelInput = blockEl.querySelector(".wheel-item-label");
     const affectsCheckbox = blockEl.querySelector(".wheel-item-affects-timer");
-    const minutesInput = blockEl.querySelector(".wheel-item-minutes");
+    const hoursInput = blockEl.querySelector(".wheel-item-hours");
     const label = labelInput.value.trim();
     if (!label) { alert("請輸入項目名稱"); return; }
 
-    let effectMinutes = null;
+    let effectHours = null;
     if (affectsCheckbox.checked) {
-        const minutes = parseFloat(minutesInput.value);
-        if (isNaN(minutes)) { alert("請輸入分鐘數，或者取消勾選「加鐘」"); return; }
-        effectMinutes = minutes;
+        const hrs = parseFloat(hoursInput.value);
+        if (isNaN(hrs)) { alert("請輸入小時數，或者取消勾選「加鐘」"); return; }
+        effectHours = hrs;
     }
 
     const wheel = wheelsCache.find((w) => w.id === wheelId);
     if (!wheel) return;
-    const items = [...(wheel.items || []), { id: genId(), label, effectMinutes }];
+    const items = [...(wheel.items || []), { id: genId(), label, effectHours }];
     await updateDoc(doc(db, "wheels", wheelId), { items });
 }
 
@@ -786,18 +786,18 @@ function spinWheel(wheelId, btnEl) {
 }
 
 async function applyWheelResult(wheel, chosenItem) {
-    if (chosenItem.effectMinutes != null) {
-        await adjustTime(chosenItem.effectMinutes * 60000);
+    if (chosenItem.effectHours != null) {
+        await adjustTime(chosenItem.effectHours * 3600000);
     }
     const spins = [...(wheel.spins || []), {
         id: genId(),
         resultLabel: chosenItem.label,
-        effectMinutes: chosenItem.effectMinutes,
+        effectHours: chosenItem.effectHours,
         timestamp: Date.now()
     }];
     await updateDoc(doc(db, "wheels", wheel.id), { spins });
-    const effectText = chosenItem.effectMinutes != null
-        ? `（${chosenItem.effectMinutes >= 0 ? "+" : ""}${chosenItem.effectMinutes} 分鐘）`
+    const effectText = chosenItem.effectHours != null
+        ? `（${chosenItem.effectHours >= 0 ? "+" : ""}${chosenItem.effectHours} 小時）`
         : "";
     alert(`輪盤結果：${chosenItem.label}${effectText}`);
 }
