@@ -171,7 +171,7 @@
 
                         data.items.forEach(item => {
                             if (item.snippet.type === 'superChatEvent') {
-                                const scDetails = item.snippet.superChatEvent;
+                                const scDetails = item.snippet.superChatDetails;
                                 const author = item.authorDetails.displayName;
                                 const amountFormatted = scDetails.amountDisplayString;
                                 const rawAmount = scDetails.amountMicros ? (scDetails.amountMicros / 1000000) : 0;
@@ -327,6 +327,7 @@
                         loadHistoryRecords();
                     } catch (e) {
                         console.error("寫入歷史記錄失敗: ", e);
+                        alert("寫入歷史記錄失敗：" + e.message + "\n（請檢查 Firestore Rules 是否有開放 history collection 的寫入權限）");
                     }
                 }
 
@@ -475,7 +476,7 @@
                 });
             } catch (e) {
                 console.error("載入 Record 失敗", e);
-                container.innerHTML = `<div style="text-align: center; color: #FF3B30; padding: 20px;">載入記錄出錯</div>`;
+                container.innerHTML = `<div style="text-align: center; color: #FF3B30; padding: 20px;">載入記錄出錯：${e.message}</div>`;
             }
         }
 

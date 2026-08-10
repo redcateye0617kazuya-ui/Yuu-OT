@@ -56,7 +56,7 @@
                 });
             } catch (error) {
                 console.error("讀取歷史記錄出錯: ", error);
-                container.innerHTML = `<div style="text-align: center; color: #FF3B30; padding: 40px;">載入失敗，請檢查權限或網絡</div>`;
+                container.innerHTML = `<div style="text-align: center; color: #FF3B30; padding: 40px;">載入失敗，請檢查權限或網絡：${error.message}</div>`;
             }
         }
     </script>
