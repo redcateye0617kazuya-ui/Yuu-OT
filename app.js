@@ -747,6 +747,7 @@ function buildWheelBlock(wheel) {
     block.innerHTML = `
         <div class="wheel-block-header">
             <input type="text" class="wheel-name-input" value="${escapeHtml(wheel.name || "")}">
+            <label class="wheel-credit-toggle"><input type="checkbox" class="wheel-requires-credit" ${wheel.requiresSpinCredit ? "checked" : ""}> 需要抽獎機會</label>
             <button type="button" class="del-wheel-btn">刪除輪盤</button>
         </div>
         <div class="wheel-block-body">
@@ -785,6 +786,7 @@ function buildWheelBlock(wheel) {
     `;
 
     block.querySelector(".wheel-name-input").addEventListener("change", (e) => renameWheel(wheel.id, e.target.value));
+    block.querySelector(".wheel-requires-credit").addEventListener("change", (e) => toggleWheelRequiresCredit(wheel.id, e.target.checked));
     block.querySelector(".del-wheel-btn").addEventListener("click", () => deleteWheel(wheel.id));
     block.querySelector(".add-wheel-item-btn").addEventListener("click", () => addWheelItem(wheel.id, block));
     const affectsCheckbox = block.querySelector(".wheel-item-affects-timer");
@@ -815,11 +817,15 @@ function buildWheelBlock(wheel) {
 async function addWheel() {
     const name = prompt("請輸入新輪盤名稱：", "時間輪");
     if (name === null) return;
-    await addDoc(wheelsColRef, { name: name.trim() || "未命名輪盤", items: [], spins: [] });
+    await addDoc(wheelsColRef, { name: name.trim() || "未命名輪盤", items: [], spins: [], requiresSpinCredit: false });
 }
 
 async function renameWheel(wheelId, newName) {
     await updateDoc(doc(db, "wheels", wheelId), { name: newName.trim() || "未命名輪盤" });
+}
+
+async function toggleWheelRequiresCredit(wheelId, requiresCredit) {
+    await updateDoc(doc(db, "wheels", wheelId), { requiresSpinCredit: requiresCredit });
 }
 
 async function deleteWheel(wheelId) {
@@ -865,6 +871,14 @@ function spinWheel(wheelId, btnEl) {
     const wheel = wheelsCache.find((w) => w.id === wheelId);
     if (!wheel || !wheel.items || wheel.items.length === 0) { alert("請先新增輪盤項目"); return; }
 
+    if (wheel.requiresSpinCredit) {
+        const pending = Math.max(0, (campaignCache?.spinCreditsTotal || 0) - (campaignCache?.spinCreditsUsed || 0));
+        if (pending <= 0) {
+            alert("未有足夠嘅抽獎機會，儲夠課金金額/人數先可以轉呢個輪盤。");
+            return;
+        }
+    }
+
     const items = wheel.items;
     const chosenIndex = Math.floor(Math.random() * items.length);
     const chosen = items[chosenIndex];
@@ -900,7 +914,9 @@ async function applyWheelResult(wheel, chosenItem) {
         timestamp: Date.now()
     }];
     await updateDoc(doc(db, "wheels", wheel.id), { spins });
-    await incrementSpinCreditsUsed();
+    if (wheel.requiresSpinCredit) {
+        await incrementSpinCreditsUsed();
+    }
     const effectText = chosenItem.effectHours != null
         ? `（${chosenItem.effectHours >= 0 ? "+" : ""}${chosenItem.effectHours} 小時）`
         : "";
