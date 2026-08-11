@@ -341,7 +341,8 @@ async function startSession() {
             sessionStartTime: now
         },
         currentSessionScEvents: [],
-        currentSessionPaymeEvents: []
+        currentSessionPaymeEvents: [],
+        currentSessionMembershipEvents: []
     };
 
     if (isFirstEverStart) {
@@ -401,7 +402,8 @@ async function cutOffSession() {
     await updateDoc(campaignRef, {
         currentSession: { active: false },
         currentSessionScEvents: [],
-        currentSessionPaymeEvents: []
+        currentSessionPaymeEvents: [],
+        currentSessionMembershipEvents: []
     });
     refreshLiveStats();
     alert("埋數成功！馬拉松總 Timer 繼續行緊，可以隨時入新 Link 開新場。");
@@ -475,10 +477,6 @@ async function addContributionAndRecalc({ isSuperChat, id, name, amount, time, m
     const oldBonusMs = data.bonusMsGranted || 0;
     const deltaMs = newBonusMs - oldBonusMs;
 
-    const updatedLeaderboardSc = isSuperChat ? leaderboard : (data.leaderboardSc || []);
-    const updatedLeaderboardPayme = isSuperChat ? (data.leaderboardPayme || []) : leaderboard;
-    const uniqueContributorCount = mergeLeaderboards(updatedLeaderboardSc, updatedLeaderboardPayme).length;
-
     const updatePayload = {
         totalAmount: newTotal,
         bonusMsGranted: newBonusMs,
@@ -490,34 +488,48 @@ async function addContributionAndRecalc({ isSuperChat, id, name, amount, time, m
     }
 
     await updateDoc(campaignRef, updatePayload);
-    await applySpinCreditRulesForContribution(amount, uniqueContributorCount);
+    await applyAmountSpinCreditRules(amount);
     return true;
+}
+
+// ==========================================
+// 送會員（Membership Gifting）監聽
+// ==========================================
+async function addMembershipGiftEvent({ id, name, count, time }) {
+    const snap = await getDoc(campaignRef);
+    if (!snap.exists()) return;
+    const data = snap.data();
+    const events = data.currentSessionMembershipEvents || [];
+    if (events.some((e) => e.id === id)) return;
+    events.push({ id, name, count, time });
+
+    await updateDoc(campaignRef, { currentSessionMembershipEvents: events });
+    await applyMembershipSpinCreditRules(count);
 }
 
 // ==========================================
 // 抽獎機會：逐個輪盤自訂規則
 // ==========================================
-async function applySpinCreditRulesForContribution(amount, uniqueContributorCount) {
+async function applyAmountSpinCreditRules(amount) {
     for (const wheel of wheelsCache) {
-        let creditsToAdd = 0;
-        const updatePayload = {};
-
-        if (wheel.spinRuleAmountEnabled && wheel.spinRuleAmount > 0) {
-            creditsToAdd += Math.floor(amount / wheel.spinRuleAmount);
+        if (!wheel.spinRuleAmountEnabled || !(wheel.spinRuleAmount > 0)) continue;
+        const creditsToAdd = Math.floor(amount / wheel.spinRuleAmount);
+        if (creditsToAdd > 0) {
+            await updateDoc(doc(db, "wheels", wheel.id), {
+                spinCreditsTotal: (wheel.spinCreditsTotal || 0) + creditsToAdd
+            });
         }
+    }
+}
 
-        if (wheel.spinRuleContributorsEnabled && wheel.spinRuleContributors > 0) {
-            const grantedSoFar = wheel.spinRuleContributorsGranted || 0;
-            const shouldHave = Math.floor(uniqueContributorCount / wheel.spinRuleContributors);
-            if (shouldHave > grantedSoFar) {
-                creditsToAdd += (shouldHave - grantedSoFar);
-                updatePayload.spinRuleContributorsGranted = shouldHave;
-            }
-        }
-
-        if (creditsToAdd > 0 || Object.keys(updatePayload).length > 0) {
-            updatePayload.spinCreditsTotal = (wheel.spinCreditsTotal || 0) + creditsToAdd;
-            await updateDoc(doc(db, "wheels", wheel.id), updatePayload);
+async function applyMembershipSpinCreditRules(giftCount) {
+    for (const wheel of wheelsCache) {
+        if (!wheel.spinRuleMembershipEnabled || !(wheel.spinRuleMembershipCount > 0)) continue;
+        const creditsToAdd = Math.floor(giftCount / wheel.spinRuleMembershipCount);
+        if (creditsToAdd > 0) {
+            await updateDoc(doc(db, "wheels", wheel.id), {
+                spinCreditsTotal: (wheel.spinCreditsTotal || 0) + creditsToAdd
+            });
         }
     }
 }
@@ -598,6 +610,15 @@ function startScPolling(liveChatId, apiKey) {
                         amount,
                         time: new Date(item.snippet.publishedAt).toLocaleTimeString("en-US", { timeZone: "Asia/Hong_Kong", hour12: false }),
                         message: scDetails.userComment || ""
+                    });
+                } else if (item.snippet.type === "membershipGiftingEvent") {
+                    const giftDetails = item.snippet.membershipGiftingDetails;
+                    if (!giftDetails) continue;
+                    await addMembershipGiftEvent({
+                        id: item.id,
+                        name: item.authorDetails.displayName,
+                        count: giftDetails.giftMembershipsCount || 0,
+                        time: new Date(item.snippet.publishedAt).toLocaleTimeString("en-US", { timeZone: "Asia/Hong_Kong", hour12: false })
                     });
                 }
             }
@@ -785,9 +806,9 @@ function buildWheelBlock(wheel) {
                 送一次機會
             </label>
             <label class="spin-rule-label">
-                <input type="checkbox" class="wr-contributors-enabled" ${wheel.spinRuleContributorsEnabled ? "checked" : ""}>
-                每 <input type="number" class="wr-contributors-value" value="${wheel.spinRuleContributors || ""}" placeholder="人數" style="display:${wheel.spinRuleContributorsEnabled ? "" : "none"};">
-                位課金會員送一次機會
+                <input type="checkbox" class="wr-membership-enabled" ${wheel.spinRuleMembershipEnabled ? "checked" : ""}>
+                單次送會員達 <input type="number" class="wr-membership-value" value="${wheel.spinRuleMembershipCount || ""}" placeholder="個數" style="display:${wheel.spinRuleMembershipEnabled ? "" : "none"};">
+                個送一次機會
             </label>
             <label class="spin-rule-label">
                 <input type="checkbox" class="wr-daily-enabled" ${wheel.spinRuleDailyEnabled ? "checked" : ""}>
@@ -839,9 +860,9 @@ function buildWheelBlock(wheel) {
     const amountValueInput = block.querySelector(".wr-amount-value");
     amountEnabledCb.addEventListener("change", () => { amountValueInput.style.display = amountEnabledCb.checked ? "" : "none"; });
 
-    const contributorsEnabledCb = block.querySelector(".wr-contributors-enabled");
-    const contributorsValueInput = block.querySelector(".wr-contributors-value");
-    contributorsEnabledCb.addEventListener("change", () => { contributorsValueInput.style.display = contributorsEnabledCb.checked ? "" : "none"; });
+    const membershipEnabledCb = block.querySelector(".wr-membership-enabled");
+    const membershipValueInput = block.querySelector(".wr-membership-value");
+    membershipEnabledCb.addEventListener("change", () => { membershipValueInput.style.display = membershipEnabledCb.checked ? "" : "none"; });
 
     const dailyEnabledCb = block.querySelector(".wr-daily-enabled");
     const dailyValueInput = block.querySelector(".wr-daily-value");
@@ -879,7 +900,7 @@ async function addWheel() {
     await addDoc(wheelsColRef, {
         name: name.trim() || "未命名輪盤", items: [], spins: [],
         spinRuleAmountEnabled: false, spinRuleAmount: 0,
-        spinRuleContributorsEnabled: false, spinRuleContributors: 0, spinRuleContributorsGranted: 0,
+        spinRuleMembershipEnabled: false, spinRuleMembershipCount: 0,
         spinRuleDailyEnabled: false, spinRuleDailyTime: "", spinRuleDailyLastGrantDate: null,
         spinCreditsTotal: 0, spinCreditsUsed: 0
     });
@@ -892,16 +913,16 @@ async function renameWheel(wheelId, newName) {
 async function saveWheelSpinRules(wheelId, blockEl) {
     const amountEnabled = blockEl.querySelector(".wr-amount-enabled").checked;
     const amountValue = parseFloat(blockEl.querySelector(".wr-amount-value").value) || 0;
-    const contributorsEnabled = blockEl.querySelector(".wr-contributors-enabled").checked;
-    const contributorsValue = parseInt(blockEl.querySelector(".wr-contributors-value").value, 10) || 0;
+    const membershipEnabled = blockEl.querySelector(".wr-membership-enabled").checked;
+    const membershipValue = parseInt(blockEl.querySelector(".wr-membership-value").value, 10) || 0;
     const dailyEnabled = blockEl.querySelector(".wr-daily-enabled").checked;
     const dailyValue = blockEl.querySelector(".wr-daily-value").value || "";
 
     await updateDoc(doc(db, "wheels", wheelId), {
         spinRuleAmountEnabled: amountEnabled,
         spinRuleAmount: amountValue,
-        spinRuleContributorsEnabled: contributorsEnabled,
-        spinRuleContributors: contributorsValue,
+        spinRuleMembershipEnabled: membershipEnabled,
+        spinRuleMembershipCount: membershipValue,
         spinRuleDailyEnabled: dailyEnabled,
         spinRuleDailyTime: dailyValue
     });
@@ -951,7 +972,7 @@ function spinWheel(wheelId, btnEl) {
     const wheel = wheelsCache.find((w) => w.id === wheelId);
     if (!wheel || !wheel.items || wheel.items.length === 0) { alert("請先新增輪盤項目"); return; }
 
-    const requiresCredit = wheel.spinRuleAmountEnabled || wheel.spinRuleContributorsEnabled || wheel.spinRuleDailyEnabled;
+    const requiresCredit = wheel.spinRuleAmountEnabled || wheel.spinRuleMembershipEnabled || wheel.spinRuleDailyEnabled;
     if (requiresCredit) {
         const pending = Math.max(0, (wheel.spinCreditsTotal || 0) - (wheel.spinCreditsUsed || 0));
         if (pending <= 0) {
@@ -994,7 +1015,7 @@ async function applyWheelResult(wheel, chosenItem) {
         effectHours: chosenItem.effectHours,
         timestamp: Date.now()
     }];
-    const requiresCredit = wheel.spinRuleAmountEnabled || wheel.spinRuleContributorsEnabled || wheel.spinRuleDailyEnabled;
+    const requiresCredit = wheel.spinRuleAmountEnabled || wheel.spinRuleMembershipEnabled || wheel.spinRuleDailyEnabled;
     const updatePayload = { spins };
     if (requiresCredit) {
         updatePayload.spinCreditsUsed = (wheel.spinCreditsUsed || 0) + 1;
