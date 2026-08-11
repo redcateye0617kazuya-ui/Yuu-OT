@@ -196,6 +196,12 @@ function computeBonusMs(totalAmount, rules) {
     return bonusHours * 3600000;
 }
 
+function computeIsTimeUp(data) {
+    if (data.status !== "running" && data.status !== "paused") return false;
+    const remaining = data.isPaused ? (data.pausedRemainingMs || 0) : ((data.targetEndTime || 0) - Date.now());
+    return remaining <= 0;
+}
+
 // ==========================================
 // Campaign（馬拉松總狀態）同步
 // ==========================================
@@ -217,6 +223,9 @@ function setupCampaignSync() {
         const durationInput = document.getElementById("duration");
         if (durationInput) durationInput.style.display = isIdle ? "" : "none";
 
+        const finishBtn = document.getElementById("finishBtn");
+        if (finishBtn) finishBtn.style.display = (data.status === "running" || data.status === "paused") ? "inline-block" : "none";
+
         const session = data.currentSession || {};
         if (session.active) {
             document.getElementById("video_url").value = session.videoUrl || "";
@@ -229,8 +238,10 @@ function setupCampaignSync() {
             }
         } else {
             document.getElementById("video_url").value = "";
-            document.getElementById("statusBox").innerText =
-                (!data.status || data.status === "idle") ? "狀態：未開始" : "狀態：等待新 Link（馬拉松進行中）";
+            let statusText = "狀態：等待新 Link（馬拉松進行中）";
+            if (isIdle) statusText = "狀態：未開始";
+            else if (data.status === "ended") statusText = "狀態：直播馬拉松已完成";
+            document.getElementById("statusBox").innerText = statusText;
             document.getElementById("cutoffBtn").style.display = "none";
             stopScPolling();
         }
@@ -246,6 +257,13 @@ function setupCampaignSync() {
             document.getElementById("pauseBtn").style.display = "inline-block";
             document.getElementById("pauseBtn").innerText = data.isPaused ? "繼續" : "暫停";
             updateCountdown();
+        } else if (data.status === "ended") {
+            if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+            document.getElementById("pauseBtn").style.display = "none";
+            document.getElementById("countdown").innerText = "已完成";
+            document.getElementById("startTimeBox").innerText =
+                `開始時間：${data.startTime ? hkTimeString(data.startTime) : "--"}`;
+            document.getElementById("endTimeBox").innerText = "收工時間：已完成直播";
         } else {
             if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
             document.getElementById("pauseBtn").style.display = "none";
@@ -260,6 +278,8 @@ function setupCampaignSync() {
         if (recordTotalBox) recordTotalBox.innerText = totalText;
 
         renderLeaderboard("scLeaderboard", mergeLeaderboards(data.leaderboardSc, data.leaderboardPayme));
+        renderSessionFeed("sessionPaymeFeed", data.currentSessionPaymeEvents);
+        renderSessionFeed("sessionScFeed", data.currentSessionScEvents);
         updateStatCards(data);
     }, (error) => notifyFirestoreError("Campaign", error));
 }
@@ -290,6 +310,23 @@ function renderLeaderboard(containerId, list) {
             <span class="rank">#${i + 1}</span>
             <span class="lb-name">${escapeHtml(entry.name)}</span>
             <span class="lb-amount">$HKD ${entry.amount.toLocaleString()}</span>
+        </div>
+    `).join("");
+}
+
+function renderSessionFeed(containerId, events) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    if (!events || events.length === 0) {
+        container.innerHTML = '<div class="empty-hint">暫時未有紀錄</div>';
+        return;
+    }
+    const newestFirst = [...events].reverse();
+    container.innerHTML = newestFirst.map((e) => `
+        <div class="session-feed-row">
+            <span class="feed-name">${escapeHtml(e.name)}</span>
+            <span class="feed-amount">$HKD ${(e.amount || 0).toLocaleString()}</span>
+            <span class="feed-time">${escapeHtml(e.time || "")}</span>
         </div>
     `).join("");
 }
@@ -344,6 +381,10 @@ async function startSession() {
     const data = snap.exists() ? snap.data() : null;
     if (data && data.currentSession && data.currentSession.active) {
         alert("而家已經有直播 Session 進行緊，請先 Cut Off 先可以入新 Link！");
+        return;
+    }
+    if (data && data.status === "ended") {
+        alert("馬拉松已經完成直播，如要開新一輪請先撳「重設馬拉松」。");
         return;
     }
 
@@ -453,18 +494,37 @@ async function togglePause() {
     }
 }
 
-async function adjustTime(deltaMs) {
+async function adjustTime(deltaMs, silent) {
     const snap = await getDoc(campaignRef);
     if (!snap.exists() || (snap.data().status !== "running" && snap.data().status !== "paused")) {
-        alert("馬拉松未開始，無法調整時間");
-        return;
+        if (!silent) alert("馬拉松未開始，無法調整時間");
+        return false;
     }
     const data = snap.data();
+    if (computeIsTimeUp(data)) {
+        if (!silent) alert("倒數已經去到 0:00:00，時間已經鎖定，無法再加/減鐘。");
+        return false;
+    }
     if (data.isPaused) {
         await updateDoc(campaignRef, { pausedRemainingMs: Math.max(0, (data.pausedRemainingMs || 0) + deltaMs) });
     } else {
         await updateDoc(campaignRef, { targetEndTime: (data.targetEndTime || Date.now()) + deltaMs });
     }
+    return true;
+}
+
+async function finishMarathon() {
+    const snap = await getDoc(campaignRef);
+    if (!snap.exists()) return;
+    const data = snap.data();
+    if (data.currentSession && data.currentSession.active) {
+        alert("而家仲有直播 Session 進行緊，請先 Cut Off 埋數先可以完成直播。");
+        return;
+    }
+    if (!confirm("確定要完成成個直播馬拉松？完成之後就唔可以再開新 Session 或者加鐘，直到你「重設馬拉松」開新一輪為止。")) return;
+    stopScPolling();
+    await updateDoc(campaignRef, { status: "ended", isPaused: false });
+    alert("直播馬拉松已經完成！");
 }
 
 async function resetCampaign() {
@@ -474,7 +534,8 @@ async function resetCampaign() {
     await setDoc(campaignRef, {
         status: "idle", isPaused: false, startTime: null, targetEndTime: null, pausedRemainingMs: 0,
         totalAmount: 0, bonusMsGranted: 0, leaderboardSc: [], leaderboardPayme: [],
-        currentSession: { active: false }, currentSessionScEvents: [], currentSessionPaymeEvents: []
+        currentSession: { active: false }, currentSessionScEvents: [], currentSessionPaymeEvents: [],
+        currentSessionMembershipEvents: []
     });
 }
 
@@ -509,7 +570,7 @@ async function addContributionAndRecalc({ isSuperChat, id, name, amount, time, m
         [sessionKey]: sessionEvents,
         [lbKey]: leaderboard
     };
-    if (deltaMs !== 0 && (data.status === "running" || data.status === "paused")) {
+    if (deltaMs !== 0 && (data.status === "running" || data.status === "paused") && !computeIsTimeUp(data)) {
         updatePayload.targetEndTime = (data.targetEndTime || Date.now()) + deltaMs;
     }
 
@@ -702,10 +763,11 @@ async function reapplyRulesToCampaign() {
     const newBonusMs = computeBonusMs(data.totalAmount || 0, rulesCache);
     const deltaMs = newBonusMs - (data.bonusMsGranted || 0);
     if (deltaMs === 0) return;
-    await updateDoc(campaignRef, {
-        bonusMsGranted: newBonusMs,
-        targetEndTime: (data.targetEndTime || Date.now()) + deltaMs
-    });
+    const updatePayload = { bonusMsGranted: newBonusMs };
+    if (!computeIsTimeUp(data)) {
+        updatePayload.targetEndTime = (data.targetEndTime || Date.now()) + deltaMs;
+    }
+    await updateDoc(campaignRef, updatePayload);
 }
 
 async function addRule() {
@@ -1032,8 +1094,9 @@ function spinWheel(wheelId, btnEl) {
 }
 
 async function applyWheelResult(wheel, chosenItem) {
+    let timeApplied = true;
     if (chosenItem.effectHours != null) {
-        await adjustTime(chosenItem.effectHours * 3600000);
+        timeApplied = await adjustTime(chosenItem.effectHours * 3600000, true);
     }
     const spins = [...(wheel.spins || []), {
         id: genId(),
@@ -1047,9 +1110,12 @@ async function applyWheelResult(wheel, chosenItem) {
         updatePayload.spinCreditsUsed = (wheel.spinCreditsUsed || 0) + 1;
     }
     await updateDoc(doc(db, "wheels", wheel.id), updatePayload);
-    const effectText = chosenItem.effectHours != null
-        ? `（${chosenItem.effectHours >= 0 ? "+" : ""}${chosenItem.effectHours} 小時）`
-        : "";
+    let effectText = "";
+    if (chosenItem.effectHours != null) {
+        effectText = timeApplied
+            ? `（${chosenItem.effectHours >= 0 ? "+" : ""}${chosenItem.effectHours} 小時）`
+            : "（時間已鎖定，未能加/減鐘）";
+    }
     alert(`輪盤結果：${chosenItem.label}${effectText}`);
 }
 
@@ -1202,6 +1268,7 @@ window.addEventListener("DOMContentLoaded", () => {
     document.getElementById("startBtn").addEventListener("click", startSession);
     document.getElementById("pauseBtn").addEventListener("click", togglePause);
     document.getElementById("cutoffBtn").addEventListener("click", cutOffSession);
+    document.getElementById("finishBtn").addEventListener("click", finishMarathon);
     document.getElementById("resetBtn").addEventListener("click", resetCampaign);
     document.getElementById("addPaymeBtn").addEventListener("click", addPayme);
     document.getElementById("addRuleBtn").addEventListener("click", addRule);
