@@ -124,7 +124,7 @@ function updateStatCards(data) {
 }
 
 function updatePendingSpinsStat() {
-    const pending = wheelsCache.reduce((sum, w) => sum + Math.max(0, (w.spinCreditsTotal || 0) - (w.spinCreditsUsed || 0)), 0);
+    const pending = wheelsCache.reduce((sum, w) => sum + (w.spinQueue || []).length, 0);
     const el = document.getElementById("statPendingSpins");
     if (el) el.textContent = pending;
     lastPendingSpinsUpdateTime = Date.now();
@@ -581,7 +581,7 @@ async function addContributionAndRecalc({ isSuperChat, id, name, amount, time, m
     }
 
     await updateDoc(campaignRef, updatePayload);
-    await applyAmountSpinCreditRules(amount);
+    await applyAmountSpinCreditRules(amount, name);
     return true;
 }
 
@@ -597,32 +597,32 @@ async function addMembershipGiftEvent({ id, name, count, time }) {
     events.push({ id, name, count, time });
 
     await updateDoc(campaignRef, { currentSessionMembershipEvents: events });
-    await applyMembershipSpinCreditRules(count);
+    await applyMembershipSpinCreditRules(count, name);
 }
 
 // ==========================================
 // 抽獎機會：逐個輪盤自訂規則
 // ==========================================
-async function applyAmountSpinCreditRules(amount) {
+async function applyAmountSpinCreditRules(amount, name) {
     for (const wheel of wheelsCache) {
         if (!wheel.spinRuleAmountEnabled || !(wheel.spinRuleAmount > 0)) continue;
         const creditsToAdd = Math.floor(amount / wheel.spinRuleAmount);
         if (creditsToAdd > 0) {
-            await updateDoc(doc(db, "wheels", wheel.id), {
-                spinCreditsTotal: (wheel.spinCreditsTotal || 0) + creditsToAdd
-            });
+            const newEntries = Array.from({ length: creditsToAdd }, () => ({ id: genId(), name, source: "課金", time: Date.now() }));
+            const spinQueue = [...(wheel.spinQueue || []), ...newEntries];
+            await updateDoc(doc(db, "wheels", wheel.id), { spinQueue });
         }
     }
 }
 
-async function applyMembershipSpinCreditRules(giftCount) {
+async function applyMembershipSpinCreditRules(giftCount, name) {
     for (const wheel of wheelsCache) {
         if (!wheel.spinRuleMembershipEnabled || !(wheel.spinRuleMembershipCount > 0)) continue;
         const creditsToAdd = Math.floor(giftCount / wheel.spinRuleMembershipCount);
         if (creditsToAdd > 0) {
-            await updateDoc(doc(db, "wheels", wheel.id), {
-                spinCreditsTotal: (wheel.spinCreditsTotal || 0) + creditsToAdd
-            });
+            const newEntries = Array.from({ length: creditsToAdd }, () => ({ id: genId(), name, source: "送會員", time: Date.now() }));
+            const spinQueue = [...(wheel.spinQueue || []), ...newEntries];
+            await updateDoc(doc(db, "wheels", wheel.id), { spinQueue });
         }
     }
 }
@@ -643,8 +643,9 @@ async function checkDailySpinCredits() {
         if (!wheel.spinRuleDailyEnabled || !wheel.spinRuleDailyTime) continue;
         if (wheel.spinRuleDailyLastGrantDate === todayStr) continue;
         if (nowHHMM < wheel.spinRuleDailyTime) continue;
+        const spinQueue = [...(wheel.spinQueue || []), { id: genId(), name: "每日獎勵", source: "每日", time: Date.now() }];
         await updateDoc(doc(db, "wheels", wheel.id), {
-            spinCreditsTotal: (wheel.spinCreditsTotal || 0) + 1,
+            spinQueue,
             spinRuleDailyLastGrantDate: todayStr
         });
     }
@@ -806,6 +807,7 @@ function setupWheelsSync() {
     onSnapshot(wheelsColRef, (qs) => {
         wheelsCache = [];
         qs.forEach((d) => wheelsCache.push({ id: d.id, ...d.data() }));
+        wheelsCache.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
         renderWheels();
         updatePendingSpinsStat();
     }, (error) => notifyFirestoreError("輪盤", error));
@@ -887,6 +889,7 @@ function buildWheelBlock(wheel) {
     block.className = "wheel-block";
     const items = wheel.items || [];
     const spins = wheel.spins || [];
+    const queue = wheel.spinQueue || [];
 
     block.innerHTML = `
         <div class="wheel-block-header">
@@ -911,6 +914,18 @@ function buildWheelBlock(wheel) {
             </label>
             <button type="button" class="save-wheel-rules-btn">儲存規則</button>
         </div>
+        ${(wheel.spinRuleAmountEnabled || wheel.spinRuleMembershipEnabled || wheel.spinRuleDailyEnabled) ? `
+        <div class="wheel-spin-queue">
+            <div class="wheel-spin-history-title">抽獎機會排隊 List <span class="panel-subtitle">由舊到新，最上面下一個轉</span></div>
+            <div class="wheel-queue-list">
+                ${queue.length === 0 ? '<div class="empty-hint">暫時未有排緊隊嘅機會</div>' : queue.map((q) => `
+                    <div class="wheel-queue-row">
+                        <span class="feed-name">${escapeHtml(q.name || "")}</span>
+                        <span class="feed-time">${q.source ? escapeHtml(q.source) : ""} ${hkTimeString(q.time)}</span>
+                    </div>
+                `).join("")}
+            </div>
+        </div>` : ""}
         <div class="wheel-block-body">
             <div class="wheel-items-col">
                 <div class="wheel-item-add-row">
@@ -992,11 +1007,11 @@ async function addWheel() {
     const name = prompt("請輸入新輪盤名稱：", "時間輪");
     if (name === null) return;
     await addDoc(wheelsColRef, {
-        name: name.trim() || "未命名輪盤", items: [], spins: [],
+        name: name.trim() || "未命名輪盤", items: [], spins: [], createdAt: Date.now(),
         spinRuleAmountEnabled: false, spinRuleAmount: 0,
         spinRuleMembershipEnabled: false, spinRuleMembershipCount: 0,
         spinRuleDailyEnabled: false, spinRuleDailyTime: "", spinRuleDailyLastGrantDate: null,
-        spinCreditsTotal: 0, spinCreditsUsed: 0
+        spinQueue: []
     });
 }
 
@@ -1068,7 +1083,7 @@ function spinWheel(wheelId, btnEl) {
 
     const requiresCredit = wheel.spinRuleAmountEnabled || wheel.spinRuleMembershipEnabled || wheel.spinRuleDailyEnabled;
     if (requiresCredit) {
-        const pending = Math.max(0, (wheel.spinCreditsTotal || 0) - (wheel.spinCreditsUsed || 0));
+        const pending = (wheel.spinQueue || []).length;
         if (pending <= 0) {
             alert("呢個輪盤未有足夠嘅抽獎機會，達成設定嘅條件先可以轉。");
             return;
@@ -1113,7 +1128,9 @@ async function applyWheelResult(wheel, chosenItem) {
     const requiresCredit = wheel.spinRuleAmountEnabled || wheel.spinRuleMembershipEnabled || wheel.spinRuleDailyEnabled;
     const updatePayload = { spins };
     if (requiresCredit) {
-        updatePayload.spinCreditsUsed = (wheel.spinCreditsUsed || 0) + 1;
+        const freshSnap = await getDoc(doc(db, "wheels", wheel.id));
+        const freshQueue = freshSnap.exists() ? (freshSnap.data().spinQueue || []) : (wheel.spinQueue || []);
+        updatePayload.spinQueue = freshQueue.slice(1);
     }
     await updateDoc(doc(db, "wheels", wheel.id), updatePayload);
     let effectText = "";
