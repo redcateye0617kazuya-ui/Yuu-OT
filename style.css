@@ -68,18 +68,13 @@ body {
 
 /* ---------- Main content ---------- */
 .main-content { flex: 1; padding: 32px 40px; min-width: 0; }
-.page-header { margin-bottom: 24px; }
-.page-header h1 {
-    font-weight: 700; font-size: 28px; color: var(--text-dark);
-    margin: 0; letter-spacing: -0.3px;
-}
 
 .page-view { width: 100%; }
 
 /* ---------- Dashboard ---------- */
 .dashboard-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr 260px 1fr;
+    grid-template-columns: 1fr 1fr 340px 1fr;
     grid-template-rows: auto auto auto;
     grid-template-areas:
         "stat1 stat2 timer board"
@@ -96,14 +91,14 @@ body {
 .panel h3 { margin: 0 0 14px 0; color: var(--text-dark); font-weight: 600; font-size: 15px; display: flex; align-items: baseline; gap: 8px; }
 .panel-subtitle { font-size: 11px; font-weight: 500; color: var(--text-muted); }
 
-.stat-card { border-top: 3px solid var(--border-soft); padding: 18px 20px; }
+.stat-card { border-top: 3px solid var(--border-soft); padding: 12px 18px; }
 .stat-card-teal { border-top-color: var(--teal); }
 .stat-card-gold { border-top-color: var(--gold); }
 .stat-card-slate { border-top-color: var(--slate); }
 .stat-card-taupe { border-top-color: var(--taupe); }
 .stat-label { font-size: 12px; color: var(--text-muted); font-weight: 600; }
-.stat-value { font-size: 26px; font-weight: 700; color: var(--text-dark); margin-top: 8px; }
-.stat-updated { font-size: 10px; color: var(--text-muted); margin-top: 8px; }
+.stat-value { font-size: 21px; font-weight: 700; color: var(--text-dark); margin-top: 4px; }
+.stat-updated { font-size: 10px; color: var(--text-muted); margin-top: 4px; }
 
 .control-bar { display: flex; flex-direction: column; gap: 12px; }
 .control-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
@@ -171,6 +166,9 @@ body {
 }
 
 /* ---------- Wheel ---------- */
+.wheel-credit-settings { margin-bottom: 16px; }
+.spin-rule-label { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-dark); }
+.spin-rule-label input { width: 90px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border-soft); background: #FBFAF7; font-size: 13px; }
 .wheel-toolbar { margin-bottom: 16px; }
 .wheel-toolbar button { padding: 10px 18px; border-radius: 10px; border: none; background: var(--teal); color: #FFFFFF; font-weight: 700; cursor: pointer; font-family: inherit; }
 .wheel-block { background: var(--panel-bg); border-radius: 20px; padding: 22px; border: none; box-shadow: var(--shadow-soft); margin-bottom: 20px; }

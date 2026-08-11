@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import {
     getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc, deleteDoc,
-    collection, addDoc, getDocs, query, orderBy, getCountFromServer
+    collection, addDoc, getDocs, query, orderBy
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 // ==========================================
@@ -32,7 +32,7 @@ let rulesCache = [];
 let wheelsCache = [];
 const wheelRotationState = {};
 let lastCampaignUpdateTime = null;
-let lastSessionCountUpdateTime = null;
+let lastLiveHoursUpdateTime = null;
 
 // ==========================================
 // 工具函數
@@ -87,38 +87,41 @@ function relativeTimeLabel(ts) {
 function updateStatCards(data) {
     const scTotal = (data.leaderboardSc || []).reduce((s, e) => s + (e.amount || 0), 0);
     const paymeTotal = (data.leaderboardPayme || []).reduce((s, e) => s + (e.amount || 0), 0);
-    const contributorNames = new Set();
-    (data.currentSessionScEvents || []).forEach((e) => contributorNames.add(e.name));
-    (data.currentSessionPaymeEvents || []).forEach((e) => contributorNames.add(e.name));
+    const pendingSpins = Math.max(0, (data.spinCreditsTotal || 0) - (data.spinCreditsUsed || 0));
 
     const scEl = document.getElementById("statScTotal");
     const paymeEl = document.getElementById("statPaymeTotal");
-    const contributorsEl = document.getElementById("statSessionContributors");
+    const pendingSpinsEl = document.getElementById("statPendingSpins");
     if (scEl) scEl.textContent = `$${scTotal.toLocaleString()}`;
     if (paymeEl) paymeEl.textContent = `$${paymeTotal.toLocaleString()}`;
-    if (contributorsEl) contributorsEl.textContent = contributorNames.size;
+    if (pendingSpinsEl) pendingSpinsEl.textContent = pendingSpins;
 
     lastCampaignUpdateTime = Date.now();
 }
 
 function tickStatTimestamps() {
     const campaignLabel = relativeTimeLabel(lastCampaignUpdateTime);
-    ["statScUpdated", "statPaymeUpdated", "statContributorsUpdated"].forEach((id) => {
+    ["statScUpdated", "statPaymeUpdated", "statPendingSpinsUpdated"].forEach((id) => {
         const el = document.getElementById(id);
         if (el) el.textContent = campaignLabel;
     });
-    const sessionCountUpdatedEl = document.getElementById("statSessionCountUpdated");
-    if (sessionCountUpdatedEl) sessionCountUpdatedEl.textContent = relativeTimeLabel(lastSessionCountUpdateTime);
+    const liveHoursUpdatedEl = document.getElementById("statLiveHoursUpdated");
+    if (liveHoursUpdatedEl) liveHoursUpdatedEl.textContent = relativeTimeLabel(lastLiveHoursUpdateTime);
 }
 
-async function refreshSessionCount() {
+async function refreshLiveStats() {
     try {
-        const snap = await getCountFromServer(sessionsColRef);
-        const el = document.getElementById("statSessionCount");
-        if (el) el.textContent = snap.data().count;
-        lastSessionCountUpdateTime = Date.now();
+        const qs = await getDocs(sessionsColRef);
+        let totalMs = 0;
+        qs.forEach((d) => {
+            const s = d.data();
+            if (s.sessionStartTime && s.sessionEndTime) totalMs += (s.sessionEndTime - s.sessionStartTime);
+        });
+        const el = document.getElementById("statLiveHours");
+        if (el) el.textContent = `${(totalMs / 3600000).toFixed(1)}H`;
+        lastLiveHoursUpdateTime = Date.now();
     } catch (e) {
-        console.error("讀取累積場數失敗:", e);
+        console.error("讀取累積直播時數失敗:", e);
     }
 }
 
@@ -180,6 +183,11 @@ function setupCampaignSync() {
         const isIdle = !data.status || data.status === "idle";
         const durationInput = document.getElementById("duration");
         if (durationInput) durationInput.style.display = isIdle ? "" : "none";
+
+        const perAmountInput = document.getElementById("spinCreditPerAmount");
+        const perContributorsInput = document.getElementById("spinCreditPerContributors");
+        if (perAmountInput) perAmountInput.value = data.spinCreditPerAmount || "";
+        if (perContributorsInput) perContributorsInput.value = data.spinCreditPerContributors || "";
 
         const session = data.currentSession || {};
         if (session.active) {
@@ -393,7 +401,7 @@ async function cutOffSession() {
         currentSessionScEvents: [],
         currentSessionPaymeEvents: []
     });
-    refreshSessionCount();
+    refreshLiveStats();
     alert("埋數成功！馬拉松總 Timer 繼續行緊，可以隨時入新 Link 開新場。");
 }
 
@@ -433,10 +441,17 @@ async function resetCampaign() {
     if (!confirm("確定要完全重設成個馬拉松？呢個動作會清空 Total 金額、排行榜同 Timer，但唔會刪走已經 Cut Off 嘅單場 Record。")) return;
     if (!confirm("再次確認：真係要重設？此動作無法復原。")) return;
     stopScPolling();
+    const snap = await getDoc(campaignRef);
+    const preservedSpinRules = snap.exists() ? {
+        spinCreditPerAmount: snap.data().spinCreditPerAmount || 0,
+        spinCreditPerContributors: snap.data().spinCreditPerContributors || 0
+    } : { spinCreditPerAmount: 0, spinCreditPerContributors: 0 };
     await setDoc(campaignRef, {
         status: "idle", isPaused: false, startTime: null, targetEndTime: null, pausedRemainingMs: 0,
         totalAmount: 0, bonusMsGranted: 0, leaderboardSc: [], leaderboardPayme: [],
-        currentSession: { active: false }, currentSessionScEvents: [], currentSessionPaymeEvents: []
+        currentSession: { active: false }, currentSessionScEvents: [], currentSessionPaymeEvents: [],
+        spinCreditsTotal: 0, spinCreditsUsed: 0, spinCreditsGrantedByContributors: 0,
+        ...preservedSpinRules
     });
 }
 
@@ -465,11 +480,34 @@ async function addContributionAndRecalc({ isSuperChat, id, name, amount, time, m
     const oldBonusMs = data.bonusMsGranted || 0;
     const deltaMs = newBonusMs - oldBonusMs;
 
+    // 抽獎機會：單次課金金額規則
+    let spinCreditsTotal = data.spinCreditsTotal || 0;
+    const perAmountRule = data.spinCreditPerAmount || 0;
+    if (perAmountRule > 0) {
+        spinCreditsTotal += Math.floor(amount / perAmountRule);
+    }
+
+    // 抽獎機會：課金會員人數規則
+    const updatedLeaderboardSc = isSuperChat ? leaderboard : (data.leaderboardSc || []);
+    const updatedLeaderboardPayme = isSuperChat ? (data.leaderboardPayme || []) : leaderboard;
+    let spinCreditsGrantedByContributors = data.spinCreditsGrantedByContributors || 0;
+    const perContributorsRule = data.spinCreditPerContributors || 0;
+    if (perContributorsRule > 0) {
+        const uniqueCount = mergeLeaderboards(updatedLeaderboardSc, updatedLeaderboardPayme).length;
+        const shouldHave = Math.floor(uniqueCount / perContributorsRule);
+        if (shouldHave > spinCreditsGrantedByContributors) {
+            spinCreditsTotal += (shouldHave - spinCreditsGrantedByContributors);
+            spinCreditsGrantedByContributors = shouldHave;
+        }
+    }
+
     const updatePayload = {
         totalAmount: newTotal,
         bonusMsGranted: newBonusMs,
         [sessionKey]: sessionEvents,
-        [lbKey]: leaderboard
+        [lbKey]: leaderboard,
+        spinCreditsTotal,
+        spinCreditsGrantedByContributors
     };
     if (deltaMs !== 0 && (data.status === "running" || data.status === "paused")) {
         updatePayload.targetEndTime = (data.targetEndTime || Date.now()) + deltaMs;
@@ -862,10 +900,30 @@ async function applyWheelResult(wheel, chosenItem) {
         timestamp: Date.now()
     }];
     await updateDoc(doc(db, "wheels", wheel.id), { spins });
+    await incrementSpinCreditsUsed();
     const effectText = chosenItem.effectHours != null
         ? `（${chosenItem.effectHours >= 0 ? "+" : ""}${chosenItem.effectHours} 小時）`
         : "";
     alert(`輪盤結果：${chosenItem.label}${effectText}`);
+}
+
+async function incrementSpinCreditsUsed() {
+    const snap = await getDoc(campaignRef);
+    if (!snap.exists()) return;
+    const used = (snap.data().spinCreditsUsed || 0) + 1;
+    await updateDoc(campaignRef, { spinCreditsUsed: used });
+}
+
+async function saveSpinCreditSettings() {
+    const perAmountRaw = document.getElementById("spinCreditPerAmount").value.trim();
+    const perContributorsRaw = document.getElementById("spinCreditPerContributors").value.trim();
+    const perAmount = perAmountRaw === "" ? 0 : parseFloat(perAmountRaw);
+    const perContributors = perContributorsRaw === "" ? 0 : parseInt(perContributorsRaw, 10);
+    await updateDoc(campaignRef, {
+        spinCreditPerAmount: isNaN(perAmount) ? 0 : perAmount,
+        spinCreditPerContributors: isNaN(perContributors) ? 0 : perContributors
+    });
+    alert("已儲存抽獎機會設定");
 }
 
 // ==========================================
@@ -953,14 +1011,9 @@ function switchTab(tabName) {
         if (el) el.style.display = (key === tabName) ? (key === "dashboard" ? "grid" : "block") : "none";
     });
 
-    let title = "主控台";
     document.querySelectorAll(".tab-btn").forEach((btn) => {
-        const isActive = btn.dataset.tab === tabName;
-        btn.classList.toggle("active", isActive);
-        if (isActive) title = btn.dataset.title || btn.textContent;
+        btn.classList.toggle("active", btn.dataset.tab === tabName);
     });
-    const pageTitle = document.getElementById("pageTitle");
-    if (pageTitle) pageTitle.textContent = title;
 
     localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, tabName);
     if (tabName === "record") loadSessions();
@@ -970,7 +1023,7 @@ window.addEventListener("DOMContentLoaded", () => {
     setupCampaignSync();
     setupRulesSync();
     setupWheelsSync();
-    refreshSessionCount();
+    refreshLiveStats();
     if (!statTickInterval) statTickInterval = setInterval(tickStatTimestamps, 1000);
 
     document.getElementById("startBtn").addEventListener("click", startSession);
@@ -980,6 +1033,7 @@ window.addEventListener("DOMContentLoaded", () => {
     document.getElementById("addPaymeBtn").addEventListener("click", addPayme);
     document.getElementById("addRuleBtn").addEventListener("click", addRule);
     document.getElementById("addWheelBtn").addEventListener("click", addWheel);
+    document.getElementById("saveSpinCreditSettingsBtn").addEventListener("click", saveSpinCreditSettings);
 
     document.querySelectorAll(".time-adjust-btn").forEach((btn) => {
         btn.addEventListener("click", () => adjustTime(parseInt(btn.dataset.deltaMs, 10)));
