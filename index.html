@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>雲端加班台 Dashboard</title>
+    <title>YUU又又又OT Dashboard</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -16,7 +16,7 @@
         <header class="topbar">
             <div class="topbar-logo">
                 <span class="logo-dots"><span></span><span></span><span></span><span></span></span>
-                雲端加班台
+                YUU又又又OT
             </div>
             <nav class="topbar-nav">
                 <button class="tab-btn active" data-tab="dashboard" data-title="主控台">主控台</button>
@@ -28,10 +28,6 @@
         </header>
 
         <main class="main-content">
-            <header class="page-header">
-                <h1 id="pageTitle">主控台</h1>
-            </header>
-
             <!-- ============ Dashboard ============ -->
             <div class="page-view dashboard-grid" id="dashboardView">
                 <div class="panel stat-card stat-card-teal" style="grid-area: stat1;">
@@ -45,14 +41,14 @@
                     <div class="stat-updated" id="statPaymeUpdated">--</div>
                 </div>
                 <div class="panel stat-card stat-card-slate" style="grid-area: stat3;">
-                    <div class="stat-label">本場課金人數</div>
-                    <div class="stat-value" id="statSessionContributors">0</div>
-                    <div class="stat-updated" id="statContributorsUpdated">--</div>
+                    <div class="stat-label">未抽輪盤次數</div>
+                    <div class="stat-value" id="statPendingSpins">0</div>
+                    <div class="stat-updated" id="statPendingSpinsUpdated">--</div>
                 </div>
                 <div class="panel stat-card stat-card-taupe" style="grid-area: stat4;">
-                    <div class="stat-label">累積加班場數</div>
-                    <div class="stat-value" id="statSessionCount">0</div>
-                    <div class="stat-updated" id="statSessionCountUpdated">--</div>
+                    <div class="stat-label">累積直播時數</div>
+                    <div class="stat-value" id="statLiveHours">0H</div>
+                    <div class="stat-updated" id="statLiveHoursUpdated">--</div>
                 </div>
 
                 <div class="panel timer-panel" style="grid-area: timer;">
@@ -117,6 +113,15 @@
 
             <!-- ============ 輪盤 ============ -->
             <div class="page-view" id="wheelView" style="display: none;">
+                <div class="panel wheel-credit-settings">
+                    <h3>抽獎機會設定</h3>
+                    <div class="rule-form">
+                        <label class="spin-rule-label">單次課金滿 <input type="number" id="spinCreditPerAmount" placeholder="$金額"> 送一次機會</label>
+                        <label class="spin-rule-label">每 <input type="number" id="spinCreditPerContributors" placeholder="人數"> 位課金會員送一次機會</label>
+                        <button type="button" id="saveSpinCreditSettingsBtn">儲存設定</button>
+                    </div>
+                    <div class="empty-hint" style="padding: 4px 0 0; text-align: left;">兩項規則留空或填 0 即代表停用</div>
+                </div>
                 <div class="wheel-toolbar">
                     <button type="button" id="addWheelBtn">新增輪盤</button>
                 </div>
