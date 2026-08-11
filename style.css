@@ -66,6 +66,10 @@ body {
 }
 .topbar-reset:hover { background: var(--danger-soft); color: var(--danger); border-color: transparent; }
 .topbar-finish:hover { background: var(--navy-soft); color: var(--navy); border-color: transparent; }
+.topbar-finish:disabled, .timer-pause-btn:disabled {
+    opacity: 0.4; cursor: not-allowed; background: transparent; color: var(--text-muted);
+}
+.topbar-finish:disabled:hover { background: transparent; color: var(--text-muted); }
 
 .presence-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 32px; min-height: 0; }
 .presence-bar:not(:empty) { padding: 10px 32px; border-bottom: 1px solid var(--border-soft); }
@@ -87,8 +91,7 @@ body {
         "stat1 stat2 timer board"
         "stat3 stat4 timer board"
         "control control control board"
-        "paymefeed paymefeed paymefeed board"
-        "scfeed scfeed scfeed board";
+        "sessionfeeds sessionfeeds sessionfeeds board";
     gap: 16px;
     align-items: stretch;
 }
@@ -160,6 +163,7 @@ body {
 .empty-hint.error { color: var(--danger); }
 
 /* ---------- Session Feed (PayMe / SuperChat lists) ---------- */
+.session-feed-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .session-feed-panel { max-height: 260px; overflow-y: auto; }
 .session-feed-row {
     display: flex; align-items: center; gap: 10px;
@@ -248,8 +252,8 @@ body {
             "stat4"
             "timer"
             "control"
-            "paymefeed"
-            "scfeed"
+            "sessionfeeds"
             "board";
     }
+    .session-feed-cols { grid-template-columns: 1fr; }
 }

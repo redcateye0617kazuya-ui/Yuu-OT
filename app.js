@@ -224,7 +224,7 @@ function setupCampaignSync() {
         if (durationInput) durationInput.style.display = isIdle ? "" : "none";
 
         const finishBtn = document.getElementById("finishBtn");
-        if (finishBtn) finishBtn.style.display = (data.status === "running" || data.status === "paused") ? "inline-block" : "none";
+        if (finishBtn) finishBtn.disabled = !(data.status === "running" || data.status === "paused");
 
         const session = data.currentSession || {};
         if (session.active) {
@@ -254,19 +254,21 @@ function setupCampaignSync() {
 
         if (data.status === "running" || data.status === "paused") {
             if (!timerInterval) timerInterval = setInterval(updateCountdown, 1000);
-            document.getElementById("pauseBtn").style.display = "inline-block";
+            document.getElementById("pauseBtn").disabled = false;
             document.getElementById("pauseBtn").innerText = data.isPaused ? "繼續" : "暫停";
             updateCountdown();
         } else if (data.status === "ended") {
             if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
-            document.getElementById("pauseBtn").style.display = "none";
+            document.getElementById("pauseBtn").disabled = true;
+            document.getElementById("pauseBtn").innerText = "暫停";
             document.getElementById("countdown").innerText = "已完成";
             document.getElementById("startTimeBox").innerText =
                 `開始時間：${data.startTime ? hkTimeString(data.startTime) : "--"}`;
             document.getElementById("endTimeBox").innerText = "收工時間：已完成直播";
         } else {
             if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
-            document.getElementById("pauseBtn").style.display = "none";
+            document.getElementById("pauseBtn").disabled = true;
+            document.getElementById("pauseBtn").innerText = "暫停";
             document.getElementById("countdown").innerText = "--:--:--";
             document.getElementById("startTimeBox").innerText = "開始時間：--";
             document.getElementById("endTimeBox").innerText = "收工時間：--";
@@ -517,6 +519,10 @@ async function finishMarathon() {
     const snap = await getDoc(campaignRef);
     if (!snap.exists()) return;
     const data = snap.data();
+    if (data.status !== "running" && data.status !== "paused") {
+        alert("馬拉松未開始或者已經完成，冇嘢好完成。");
+        return;
+    }
     if (data.currentSession && data.currentSession.active) {
         alert("而家仲有直播 Session 進行緊，請先 Cut Off 埋數先可以完成直播。");
         return;
