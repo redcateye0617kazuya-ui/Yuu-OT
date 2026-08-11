@@ -24,7 +24,7 @@
                 <button class="tab-btn" data-tab="rule" data-title="Rule Setting">Rule Setting</button>
                 <button class="tab-btn" data-tab="wheel" data-title="輪盤">輪盤</button>
             </nav>
-            <button type="button" id="finishBtn" class="topbar-finish" style="display: none;">完成直播</button>
+            <button type="button" id="finishBtn" class="topbar-finish" disabled>完成直播</button>
             <button type="button" id="resetBtn" class="topbar-reset">重設馬拉松</button>
         </header>
 
@@ -58,7 +58,7 @@
                     <h3>剩餘加班時間</h3>
                     <div class="timer-display" id="countdown">--:--:--</div>
                     <div class="status-text" id="statusBox">狀態：未開始</div>
-                    <button type="button" id="pauseBtn" class="btn btn-warning timer-pause-btn" style="display: none;">暫停</button>
+                    <button type="button" id="pauseBtn" class="btn btn-warning timer-pause-btn" disabled>暫停</button>
                     <div class="time-adjust-row">
                         <button type="button" class="time-adjust-btn" data-delta-ms="-3600000">-1H</button>
                         <button type="button" class="time-adjust-btn" data-delta-ms="-600000">-10M</button>
@@ -90,14 +90,16 @@
                     </div>
                 </div>
 
-                <div class="panel session-feed-panel" style="grid-area: paymefeed;">
-                    <h3>本場 PayMe <span class="panel-subtitle">新到舊</span></h3>
-                    <div id="sessionPaymeFeed"><div class="empty-hint">暫時未有紀錄</div></div>
-                </div>
+                <div class="session-feed-cols" style="grid-area: sessionfeeds;">
+                    <div class="panel session-feed-panel">
+                        <h3>本場 PayMe <span class="panel-subtitle">新到舊</span></h3>
+                        <div id="sessionPaymeFeed"><div class="empty-hint">暫時未有紀錄</div></div>
+                    </div>
 
-                <div class="panel session-feed-panel" style="grid-area: scfeed;">
-                    <h3>本場 SuperChat <span class="panel-subtitle">新到舊</span></h3>
-                    <div id="sessionScFeed"><div class="empty-hint">暫時未有紀錄</div></div>
+                    <div class="panel session-feed-panel">
+                        <h3>本場 SuperChat <span class="panel-subtitle">新到舊</span></h3>
+                        <div id="sessionScFeed"><div class="empty-hint">暫時未有紀錄</div></div>
+                    </div>
                 </div>
             </div>
 
