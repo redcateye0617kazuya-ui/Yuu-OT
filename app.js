@@ -23,6 +23,11 @@ const campaignRef = doc(db, "campaign", "main");
 const rulesColRef = collection(db, "rules");
 const sessionsColRef = collection(db, "sessions");
 const wheelsColRef = collection(db, "wheels");
+const presenceColRef = collection(db, "presence");
+
+const TAB_LABELS = { dashboard: "主控台", record: "Record / Report", rule: "Rule Setting", wheel: "輪盤" };
+const PRESENCE_STALE_MS = 45000;
+const PRESENCE_HEARTBEAT_MS = 15000;
 
 let timerInterval = null;
 let statTickInterval = null;
@@ -34,6 +39,8 @@ const wheelRotationState = {};
 let lastCampaignUpdateTime = null;
 let lastLiveHoursUpdateTime = null;
 let lastPendingSpinsUpdateTime = null;
+let presenceHeartbeatInterval = null;
+let myCurrentTab = "dashboard";
 
 // ==========================================
 // 工具函數
@@ -45,6 +52,25 @@ function escapeHtml(str) {
 
 function genId() {
     return (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID() : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+}
+
+function getMyClientId() {
+    let clientId = localStorage.getItem("clientId");
+    if (!clientId) {
+        clientId = genId();
+        localStorage.setItem("clientId", clientId);
+    }
+    return clientId;
+}
+
+function getMyDisplayName() {
+    let name = localStorage.getItem("displayName");
+    if (!name) {
+        name = (prompt("請輸入你嘅名，等其他共用緊嘅人知道你喺度：", "") || "").trim();
+        if (!name) name = "訪客";
+        localStorage.setItem("displayName", name);
+    }
+    return name;
 }
 
 const notifiedErrorContexts = new Set();
@@ -1099,6 +1125,47 @@ function buildSessionCard(data) {
 }
 
 // ==========================================
+// 在線名單（Presence）
+// ==========================================
+async function updatePresence(tab) {
+    myCurrentTab = tab;
+    try {
+        await setDoc(doc(db, "presence", getMyClientId()), {
+            name: getMyDisplayName(),
+            currentTab: tab,
+            lastSeen: Date.now()
+        });
+    } catch (e) {
+        console.error("更新在線狀態失敗:", e);
+    }
+}
+
+function setupPresenceSync() {
+    onSnapshot(presenceColRef, (qs) => {
+        const now = Date.now();
+        const active = [];
+        qs.forEach((d) => {
+            const p = d.data();
+            if (p.lastSeen && (now - p.lastSeen) < PRESENCE_STALE_MS) active.push(p);
+        });
+        renderPresenceBar(active);
+    }, (error) => console.error("在線名單同步失敗:", error));
+}
+
+function renderPresenceBar(active) {
+    const bar = document.getElementById("presenceBar");
+    if (!bar) return;
+    if (active.length === 0) {
+        bar.innerHTML = "";
+        return;
+    }
+    active.sort((a, b) => a.name.localeCompare(b.name));
+    bar.innerHTML = `<span class="presence-label">而家在線：</span>` + active.map((p) => `
+        <span class="presence-chip"><span class="presence-dot"></span>${escapeHtml(p.name)} · ${escapeHtml(TAB_LABELS[p.currentTab] || p.currentTab)}</span>
+    `).join("");
+}
+
+// ==========================================
 // Tab 切換 + 初始化
 // ==========================================
 const ACTIVE_TAB_STORAGE_KEY = "activeTab";
@@ -1118,6 +1185,7 @@ function switchTab(tabName) {
 
     localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, tabName);
     if (tabName === "record") loadSessions();
+    updatePresence(tabName);
 }
 
 window.addEventListener("DOMContentLoaded", () => {
@@ -1128,6 +1196,8 @@ window.addEventListener("DOMContentLoaded", () => {
     if (!statTickInterval) statTickInterval = setInterval(tickStatTimestamps, 1000);
     checkDailySpinCredits();
     setInterval(checkDailySpinCredits, 30000);
+    setupPresenceSync();
+    if (!presenceHeartbeatInterval) presenceHeartbeatInterval = setInterval(() => updatePresence(myCurrentTab), PRESENCE_HEARTBEAT_MS);
 
     document.getElementById("startBtn").addEventListener("click", startSession);
     document.getElementById("pauseBtn").addEventListener("click", togglePause);
