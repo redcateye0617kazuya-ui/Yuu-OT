@@ -166,16 +166,17 @@ body {
 }
 
 /* ---------- Wheel ---------- */
-.wheel-credit-settings { margin-bottom: 16px; }
-.spin-rule-label { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-dark); }
-.spin-rule-label input { width: 90px; padding: 8px 10px; border-radius: 0; border: 1px solid var(--border-soft); background: #FBFAF7; font-size: 13px; }
+.spin-rule-label { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-dark); }
+.spin-rule-label input[type="number"] { width: 80px; padding: 6px 8px; border-radius: 0; border: 1px solid var(--border-soft); background: #FBFAF7; font-size: 12px; }
+.spin-rule-label input[type="time"] { width: 110px; padding: 6px 8px; border-radius: 0; border: 1px solid var(--border-soft); background: #FBFAF7; font-size: 12px; }
 .wheel-toolbar { margin-bottom: 16px; }
 .wheel-toolbar button { padding: 10px 18px; border-radius: 0; border: none; background: var(--teal); color: #FFFFFF; font-weight: 700; cursor: pointer; font-family: inherit; }
 .wheel-block { background: var(--panel-bg); border-radius: 0; padding: 22px; border: none; box-shadow: var(--shadow-soft); margin-bottom: 20px; }
-.wheel-block-header { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 14px; }
+.wheel-block-header { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
 .wheel-name-input { flex: 1; font-size: 16px; font-weight: 600; padding: 8px 12px; border-radius: 0; border: 1px solid var(--border-soft); background: #FBFAF7; color: var(--text-dark); }
-.wheel-credit-toggle { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-muted); white-space: nowrap; }
 .del-wheel-btn { padding: 8px 14px; border-radius: 0; border: none; background: var(--danger-soft); color: var(--danger); font-weight: 700; cursor: pointer; font-size: 12px; }
+.wheel-credit-rules { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding-bottom: 14px; margin-bottom: 14px; border-bottom: 1px solid var(--border-soft); }
+.wheel-credit-rules .save-wheel-rules-btn { padding: 6px 14px; border-radius: 0; border: none; background: var(--navy); color: #FFFFFF; font-weight: 700; cursor: pointer; font-size: 12px; font-family: inherit; }
 .wheel-block-body { display: flex; gap: 20px; flex-wrap: wrap; }
 .wheel-items-col { flex: 1; min-width: 170px; max-width: 260px; }
 .wheel-item-add-row { display: flex; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; align-items: center; }

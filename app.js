@@ -33,6 +33,7 @@ let wheelsCache = [];
 const wheelRotationState = {};
 let lastCampaignUpdateTime = null;
 let lastLiveHoursUpdateTime = null;
+let lastPendingSpinsUpdateTime = null;
 
 // ==========================================
 // 工具函數
@@ -87,24 +88,30 @@ function relativeTimeLabel(ts) {
 function updateStatCards(data) {
     const scTotal = (data.leaderboardSc || []).reduce((s, e) => s + (e.amount || 0), 0);
     const paymeTotal = (data.leaderboardPayme || []).reduce((s, e) => s + (e.amount || 0), 0);
-    const pendingSpins = Math.max(0, (data.spinCreditsTotal || 0) - (data.spinCreditsUsed || 0));
 
     const scEl = document.getElementById("statScTotal");
     const paymeEl = document.getElementById("statPaymeTotal");
-    const pendingSpinsEl = document.getElementById("statPendingSpins");
     if (scEl) scEl.textContent = `$${scTotal.toLocaleString()}`;
     if (paymeEl) paymeEl.textContent = `$${paymeTotal.toLocaleString()}`;
-    if (pendingSpinsEl) pendingSpinsEl.textContent = pendingSpins;
 
     lastCampaignUpdateTime = Date.now();
 }
 
+function updatePendingSpinsStat() {
+    const pending = wheelsCache.reduce((sum, w) => sum + Math.max(0, (w.spinCreditsTotal || 0) - (w.spinCreditsUsed || 0)), 0);
+    const el = document.getElementById("statPendingSpins");
+    if (el) el.textContent = pending;
+    lastPendingSpinsUpdateTime = Date.now();
+}
+
 function tickStatTimestamps() {
     const campaignLabel = relativeTimeLabel(lastCampaignUpdateTime);
-    ["statScUpdated", "statPaymeUpdated", "statPendingSpinsUpdated"].forEach((id) => {
+    ["statScUpdated", "statPaymeUpdated"].forEach((id) => {
         const el = document.getElementById(id);
         if (el) el.textContent = campaignLabel;
     });
+    const pendingSpinsUpdatedEl = document.getElementById("statPendingSpinsUpdated");
+    if (pendingSpinsUpdatedEl) pendingSpinsUpdatedEl.textContent = relativeTimeLabel(lastPendingSpinsUpdateTime);
     const liveHoursUpdatedEl = document.getElementById("statLiveHoursUpdated");
     if (liveHoursUpdatedEl) liveHoursUpdatedEl.textContent = relativeTimeLabel(lastLiveHoursUpdateTime);
 }
@@ -183,11 +190,6 @@ function setupCampaignSync() {
         const isIdle = !data.status || data.status === "idle";
         const durationInput = document.getElementById("duration");
         if (durationInput) durationInput.style.display = isIdle ? "" : "none";
-
-        const perAmountInput = document.getElementById("spinCreditPerAmount");
-        const perContributorsInput = document.getElementById("spinCreditPerContributors");
-        if (perAmountInput) perAmountInput.value = data.spinCreditPerAmount || "";
-        if (perContributorsInput) perContributorsInput.value = data.spinCreditPerContributors || "";
 
         const session = data.currentSession || {};
         if (session.active) {
@@ -441,17 +443,10 @@ async function resetCampaign() {
     if (!confirm("確定要完全重設成個馬拉松？呢個動作會清空 Total 金額、排行榜同 Timer，但唔會刪走已經 Cut Off 嘅單場 Record。")) return;
     if (!confirm("再次確認：真係要重設？此動作無法復原。")) return;
     stopScPolling();
-    const snap = await getDoc(campaignRef);
-    const preservedSpinRules = snap.exists() ? {
-        spinCreditPerAmount: snap.data().spinCreditPerAmount || 0,
-        spinCreditPerContributors: snap.data().spinCreditPerContributors || 0
-    } : { spinCreditPerAmount: 0, spinCreditPerContributors: 0 };
     await setDoc(campaignRef, {
         status: "idle", isPaused: false, startTime: null, targetEndTime: null, pausedRemainingMs: 0,
         totalAmount: 0, bonusMsGranted: 0, leaderboardSc: [], leaderboardPayme: [],
-        currentSession: { active: false }, currentSessionScEvents: [], currentSessionPaymeEvents: [],
-        spinCreditsTotal: 0, spinCreditsUsed: 0, spinCreditsGrantedByContributors: 0,
-        ...preservedSpinRules
+        currentSession: { active: false }, currentSessionScEvents: [], currentSessionPaymeEvents: []
     });
 }
 
@@ -480,41 +475,74 @@ async function addContributionAndRecalc({ isSuperChat, id, name, amount, time, m
     const oldBonusMs = data.bonusMsGranted || 0;
     const deltaMs = newBonusMs - oldBonusMs;
 
-    // 抽獎機會：單次課金金額規則
-    let spinCreditsTotal = data.spinCreditsTotal || 0;
-    const perAmountRule = data.spinCreditPerAmount || 0;
-    if (perAmountRule > 0) {
-        spinCreditsTotal += Math.floor(amount / perAmountRule);
-    }
-
-    // 抽獎機會：課金會員人數規則
     const updatedLeaderboardSc = isSuperChat ? leaderboard : (data.leaderboardSc || []);
     const updatedLeaderboardPayme = isSuperChat ? (data.leaderboardPayme || []) : leaderboard;
-    let spinCreditsGrantedByContributors = data.spinCreditsGrantedByContributors || 0;
-    const perContributorsRule = data.spinCreditPerContributors || 0;
-    if (perContributorsRule > 0) {
-        const uniqueCount = mergeLeaderboards(updatedLeaderboardSc, updatedLeaderboardPayme).length;
-        const shouldHave = Math.floor(uniqueCount / perContributorsRule);
-        if (shouldHave > spinCreditsGrantedByContributors) {
-            spinCreditsTotal += (shouldHave - spinCreditsGrantedByContributors);
-            spinCreditsGrantedByContributors = shouldHave;
-        }
-    }
+    const uniqueContributorCount = mergeLeaderboards(updatedLeaderboardSc, updatedLeaderboardPayme).length;
 
     const updatePayload = {
         totalAmount: newTotal,
         bonusMsGranted: newBonusMs,
         [sessionKey]: sessionEvents,
-        [lbKey]: leaderboard,
-        spinCreditsTotal,
-        spinCreditsGrantedByContributors
+        [lbKey]: leaderboard
     };
     if (deltaMs !== 0 && (data.status === "running" || data.status === "paused")) {
         updatePayload.targetEndTime = (data.targetEndTime || Date.now()) + deltaMs;
     }
 
     await updateDoc(campaignRef, updatePayload);
+    await applySpinCreditRulesForContribution(amount, uniqueContributorCount);
     return true;
+}
+
+// ==========================================
+// 抽獎機會：逐個輪盤自訂規則
+// ==========================================
+async function applySpinCreditRulesForContribution(amount, uniqueContributorCount) {
+    for (const wheel of wheelsCache) {
+        let creditsToAdd = 0;
+        const updatePayload = {};
+
+        if (wheel.spinRuleAmountEnabled && wheel.spinRuleAmount > 0) {
+            creditsToAdd += Math.floor(amount / wheel.spinRuleAmount);
+        }
+
+        if (wheel.spinRuleContributorsEnabled && wheel.spinRuleContributors > 0) {
+            const grantedSoFar = wheel.spinRuleContributorsGranted || 0;
+            const shouldHave = Math.floor(uniqueContributorCount / wheel.spinRuleContributors);
+            if (shouldHave > grantedSoFar) {
+                creditsToAdd += (shouldHave - grantedSoFar);
+                updatePayload.spinRuleContributorsGranted = shouldHave;
+            }
+        }
+
+        if (creditsToAdd > 0 || Object.keys(updatePayload).length > 0) {
+            updatePayload.spinCreditsTotal = (wheel.spinCreditsTotal || 0) + creditsToAdd;
+            await updateDoc(doc(db, "wheels", wheel.id), updatePayload);
+        }
+    }
+}
+
+function getHKDateString(ts) {
+    return new Date(ts).toLocaleDateString("en-CA", { timeZone: "Asia/Hong_Kong" });
+}
+
+function getHKTimeHHMM(ts) {
+    return new Date(ts).toLocaleTimeString("en-GB", { timeZone: "Asia/Hong_Kong", hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
+async function checkDailySpinCredits() {
+    const now = Date.now();
+    const todayStr = getHKDateString(now);
+    const nowHHMM = getHKTimeHHMM(now);
+    for (const wheel of wheelsCache) {
+        if (!wheel.spinRuleDailyEnabled || !wheel.spinRuleDailyTime) continue;
+        if (wheel.spinRuleDailyLastGrantDate === todayStr) continue;
+        if (nowHHMM < wheel.spinRuleDailyTime) continue;
+        await updateDoc(doc(db, "wheels", wheel.id), {
+            spinCreditsTotal: (wheel.spinCreditsTotal || 0) + 1,
+            spinRuleDailyLastGrantDate: todayStr
+        });
+    }
 }
 
 async function addPayme() {
@@ -664,6 +692,7 @@ function setupWheelsSync() {
         wheelsCache = [];
         qs.forEach((d) => wheelsCache.push({ id: d.id, ...d.data() }));
         renderWheels();
+        updatePendingSpinsStat();
     }, (error) => notifyFirestoreError("輪盤", error));
 }
 
@@ -747,8 +776,25 @@ function buildWheelBlock(wheel) {
     block.innerHTML = `
         <div class="wheel-block-header">
             <input type="text" class="wheel-name-input" value="${escapeHtml(wheel.name || "")}">
-            <label class="wheel-credit-toggle"><input type="checkbox" class="wheel-requires-credit" ${wheel.requiresSpinCredit ? "checked" : ""}> 需要抽獎機會</label>
             <button type="button" class="del-wheel-btn">刪除輪盤</button>
+        </div>
+        <div class="wheel-credit-rules">
+            <label class="spin-rule-label">
+                <input type="checkbox" class="wr-amount-enabled" ${wheel.spinRuleAmountEnabled ? "checked" : ""}>
+                課金滿 <input type="number" class="wr-amount-value" value="${wheel.spinRuleAmount || ""}" placeholder="$" style="display:${wheel.spinRuleAmountEnabled ? "" : "none"};">
+                送一次機會
+            </label>
+            <label class="spin-rule-label">
+                <input type="checkbox" class="wr-contributors-enabled" ${wheel.spinRuleContributorsEnabled ? "checked" : ""}>
+                每 <input type="number" class="wr-contributors-value" value="${wheel.spinRuleContributors || ""}" placeholder="人數" style="display:${wheel.spinRuleContributorsEnabled ? "" : "none"};">
+                位課金會員送一次機會
+            </label>
+            <label class="spin-rule-label">
+                <input type="checkbox" class="wr-daily-enabled" ${wheel.spinRuleDailyEnabled ? "checked" : ""}>
+                每日 <input type="time" class="wr-daily-value" value="${wheel.spinRuleDailyTime || ""}" style="display:${wheel.spinRuleDailyEnabled ? "" : "none"};">
+                送一次機會
+            </label>
+            <button type="button" class="save-wheel-rules-btn">儲存規則</button>
         </div>
         <div class="wheel-block-body">
             <div class="wheel-items-col">
@@ -786,9 +832,22 @@ function buildWheelBlock(wheel) {
     `;
 
     block.querySelector(".wheel-name-input").addEventListener("change", (e) => renameWheel(wheel.id, e.target.value));
-    block.querySelector(".wheel-requires-credit").addEventListener("change", (e) => toggleWheelRequiresCredit(wheel.id, e.target.checked));
     block.querySelector(".del-wheel-btn").addEventListener("click", () => deleteWheel(wheel.id));
     block.querySelector(".add-wheel-item-btn").addEventListener("click", () => addWheelItem(wheel.id, block));
+
+    const amountEnabledCb = block.querySelector(".wr-amount-enabled");
+    const amountValueInput = block.querySelector(".wr-amount-value");
+    amountEnabledCb.addEventListener("change", () => { amountValueInput.style.display = amountEnabledCb.checked ? "" : "none"; });
+
+    const contributorsEnabledCb = block.querySelector(".wr-contributors-enabled");
+    const contributorsValueInput = block.querySelector(".wr-contributors-value");
+    contributorsEnabledCb.addEventListener("change", () => { contributorsValueInput.style.display = contributorsEnabledCb.checked ? "" : "none"; });
+
+    const dailyEnabledCb = block.querySelector(".wr-daily-enabled");
+    const dailyValueInput = block.querySelector(".wr-daily-value");
+    dailyEnabledCb.addEventListener("change", () => { dailyValueInput.style.display = dailyEnabledCb.checked ? "" : "none"; });
+
+    block.querySelector(".save-wheel-rules-btn").addEventListener("click", () => saveWheelSpinRules(wheel.id, block));
     const affectsCheckbox = block.querySelector(".wheel-item-affects-timer");
     const hoursInputEl = block.querySelector(".wheel-item-hours");
     affectsCheckbox.addEventListener("change", () => {
@@ -817,15 +876,36 @@ function buildWheelBlock(wheel) {
 async function addWheel() {
     const name = prompt("請輸入新輪盤名稱：", "時間輪");
     if (name === null) return;
-    await addDoc(wheelsColRef, { name: name.trim() || "未命名輪盤", items: [], spins: [], requiresSpinCredit: false });
+    await addDoc(wheelsColRef, {
+        name: name.trim() || "未命名輪盤", items: [], spins: [],
+        spinRuleAmountEnabled: false, spinRuleAmount: 0,
+        spinRuleContributorsEnabled: false, spinRuleContributors: 0, spinRuleContributorsGranted: 0,
+        spinRuleDailyEnabled: false, spinRuleDailyTime: "", spinRuleDailyLastGrantDate: null,
+        spinCreditsTotal: 0, spinCreditsUsed: 0
+    });
 }
 
 async function renameWheel(wheelId, newName) {
     await updateDoc(doc(db, "wheels", wheelId), { name: newName.trim() || "未命名輪盤" });
 }
 
-async function toggleWheelRequiresCredit(wheelId, requiresCredit) {
-    await updateDoc(doc(db, "wheels", wheelId), { requiresSpinCredit: requiresCredit });
+async function saveWheelSpinRules(wheelId, blockEl) {
+    const amountEnabled = blockEl.querySelector(".wr-amount-enabled").checked;
+    const amountValue = parseFloat(blockEl.querySelector(".wr-amount-value").value) || 0;
+    const contributorsEnabled = blockEl.querySelector(".wr-contributors-enabled").checked;
+    const contributorsValue = parseInt(blockEl.querySelector(".wr-contributors-value").value, 10) || 0;
+    const dailyEnabled = blockEl.querySelector(".wr-daily-enabled").checked;
+    const dailyValue = blockEl.querySelector(".wr-daily-value").value || "";
+
+    await updateDoc(doc(db, "wheels", wheelId), {
+        spinRuleAmountEnabled: amountEnabled,
+        spinRuleAmount: amountValue,
+        spinRuleContributorsEnabled: contributorsEnabled,
+        spinRuleContributors: contributorsValue,
+        spinRuleDailyEnabled: dailyEnabled,
+        spinRuleDailyTime: dailyValue
+    });
+    alert("已儲存呢個輪盤嘅抽獎機會規則");
 }
 
 async function deleteWheel(wheelId) {
@@ -871,10 +951,11 @@ function spinWheel(wheelId, btnEl) {
     const wheel = wheelsCache.find((w) => w.id === wheelId);
     if (!wheel || !wheel.items || wheel.items.length === 0) { alert("請先新增輪盤項目"); return; }
 
-    if (wheel.requiresSpinCredit) {
-        const pending = Math.max(0, (campaignCache?.spinCreditsTotal || 0) - (campaignCache?.spinCreditsUsed || 0));
+    const requiresCredit = wheel.spinRuleAmountEnabled || wheel.spinRuleContributorsEnabled || wheel.spinRuleDailyEnabled;
+    if (requiresCredit) {
+        const pending = Math.max(0, (wheel.spinCreditsTotal || 0) - (wheel.spinCreditsUsed || 0));
         if (pending <= 0) {
-            alert("未有足夠嘅抽獎機會，儲夠課金金額/人數先可以轉呢個輪盤。");
+            alert("呢個輪盤未有足夠嘅抽獎機會，達成設定嘅條件先可以轉。");
             return;
         }
     }
@@ -913,33 +994,16 @@ async function applyWheelResult(wheel, chosenItem) {
         effectHours: chosenItem.effectHours,
         timestamp: Date.now()
     }];
-    await updateDoc(doc(db, "wheels", wheel.id), { spins });
-    if (wheel.requiresSpinCredit) {
-        await incrementSpinCreditsUsed();
+    const requiresCredit = wheel.spinRuleAmountEnabled || wheel.spinRuleContributorsEnabled || wheel.spinRuleDailyEnabled;
+    const updatePayload = { spins };
+    if (requiresCredit) {
+        updatePayload.spinCreditsUsed = (wheel.spinCreditsUsed || 0) + 1;
     }
+    await updateDoc(doc(db, "wheels", wheel.id), updatePayload);
     const effectText = chosenItem.effectHours != null
         ? `（${chosenItem.effectHours >= 0 ? "+" : ""}${chosenItem.effectHours} 小時）`
         : "";
     alert(`輪盤結果：${chosenItem.label}${effectText}`);
-}
-
-async function incrementSpinCreditsUsed() {
-    const snap = await getDoc(campaignRef);
-    if (!snap.exists()) return;
-    const used = (snap.data().spinCreditsUsed || 0) + 1;
-    await updateDoc(campaignRef, { spinCreditsUsed: used });
-}
-
-async function saveSpinCreditSettings() {
-    const perAmountRaw = document.getElementById("spinCreditPerAmount").value.trim();
-    const perContributorsRaw = document.getElementById("spinCreditPerContributors").value.trim();
-    const perAmount = perAmountRaw === "" ? 0 : parseFloat(perAmountRaw);
-    const perContributors = perContributorsRaw === "" ? 0 : parseInt(perContributorsRaw, 10);
-    await updateDoc(campaignRef, {
-        spinCreditPerAmount: isNaN(perAmount) ? 0 : perAmount,
-        spinCreditPerContributors: isNaN(perContributors) ? 0 : perContributors
-    });
-    alert("已儲存抽獎機會設定");
 }
 
 // ==========================================
@@ -1041,6 +1105,8 @@ window.addEventListener("DOMContentLoaded", () => {
     setupWheelsSync();
     refreshLiveStats();
     if (!statTickInterval) statTickInterval = setInterval(tickStatTimestamps, 1000);
+    checkDailySpinCredits();
+    setInterval(checkDailySpinCredits, 30000);
 
     document.getElementById("startBtn").addEventListener("click", startSession);
     document.getElementById("pauseBtn").addEventListener("click", togglePause);
@@ -1049,7 +1115,6 @@ window.addEventListener("DOMContentLoaded", () => {
     document.getElementById("addPaymeBtn").addEventListener("click", addPayme);
     document.getElementById("addRuleBtn").addEventListener("click", addRule);
     document.getElementById("addWheelBtn").addEventListener("click", addWheel);
-    document.getElementById("saveSpinCreditSettingsBtn").addEventListener("click", saveSpinCreditSettings);
 
     document.querySelectorAll(".time-adjust-btn").forEach((btn) => {
         btn.addEventListener("click", () => adjustTime(parseInt(btn.dataset.deltaMs, 10)));
