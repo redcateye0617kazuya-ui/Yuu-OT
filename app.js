@@ -967,9 +967,10 @@ function buildWheelBlock(wheel) {
             <div class="wheel-spin-history-title">抽獎機會排隊 List <span class="panel-subtitle">由舊到新，最上面下一個轉</span></div>
             <div class="wheel-queue-list">
                 ${queue.length === 0 ? '<div class="empty-hint">暫時未有排緊隊嘅機會</div>' : queue.map((q) => `
-                    <div class="wheel-queue-row">
+                    <div class="wheel-queue-row" data-queue-id="${q.id}">
                         <span class="feed-name">${escapeHtml(q.name || "")}</span>
                         <span class="feed-time">${q.source ? escapeHtml(q.source) : ""} ${escapeHtml(q.time || "")}</span>
+                        <button type="button" class="del-btn del-queue-btn">✕</button>
                     </div>
                 `).join("")}
             </div>
@@ -1039,6 +1040,9 @@ function buildWheelBlock(wheel) {
     });
     block.querySelectorAll(".del-spin-btn").forEach((btn) => {
         btn.addEventListener("click", () => deleteSpinRecord(wheel.id, btn.closest(".wheel-spin-row").dataset.spinId));
+    });
+    block.querySelectorAll(".del-queue-btn").forEach((btn) => {
+        btn.addEventListener("click", () => deleteQueueEntry(wheel.id, btn.closest(".wheel-queue-row").dataset.queueId));
     });
     block.querySelector(".spin-btn").addEventListener("click", (e) => spinWheel(wheel.id, e.target));
 
@@ -1126,6 +1130,13 @@ async function deleteSpinRecord(wheelId, spinId) {
     if (!wheel) return;
     const spins = (wheel.spins || []).filter((s) => s.id !== spinId);
     await updateDoc(doc(db, "wheels", wheelId), { spins });
+}
+
+async function deleteQueueEntry(wheelId, entryId) {
+    const wheel = wheelsCache.find((w) => w.id === wheelId);
+    if (!wheel) return;
+    const spinQueue = (wheel.spinQueue || []).filter((q) => q.id !== entryId);
+    await updateDoc(doc(db, "wheels", wheelId), { spinQueue });
 }
 
 function spinWheel(wheelId, btnEl) {

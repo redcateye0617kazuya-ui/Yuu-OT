@@ -231,10 +231,10 @@ body {
 .wheel-spin-row:last-child { border-bottom: none; }
 .wheel-spin-queue { padding-bottom: 14px; margin-bottom: 14px; border-bottom: 1px solid var(--border-soft); }
 .wheel-queue-list { max-height: 160px; overflow-y: auto; }
-.wheel-queue-row { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--text-dark); padding: 7px 2px; border-bottom: 1px solid var(--border-soft); }
+.wheel-queue-row { display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--text-dark); padding: 7px 2px; border-bottom: 1px solid var(--border-soft); }
 .wheel-queue-row:last-child { border-bottom: none; }
-.wheel-queue-row .feed-name { font-weight: 700; }
-.wheel-queue-row .feed-time { color: var(--text-muted); }
+.wheel-queue-row .feed-name { font-weight: 700; flex: 1; }
+.wheel-queue-row .feed-time { color: var(--text-muted); white-space: nowrap; }
 
 /* ---------- Record ---------- */
 .record-header { display: flex; justify-content: flex-end; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
