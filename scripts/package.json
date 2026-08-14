@@ -1,0 +1,8 @@
+{
+  "name": "yuu-ot-scripts",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "firebase-admin": "^12.6.0"
+  }
+}
