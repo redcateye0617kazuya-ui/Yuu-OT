@@ -174,6 +174,7 @@ body {
 .session-feed-row .feed-name { flex: 1; font-size: 13px; font-weight: 700; color: var(--text-dark); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .session-feed-row .feed-amount { font-size: 13px; font-weight: 700; color: var(--text-dark); flex-shrink: 0; }
 .session-feed-row .feed-time { font-size: 11px; color: var(--text-muted); flex-shrink: 0; min-width: 44px; text-align: right; }
+.feed-fx-hint { font-size: 10px; font-weight: 400; color: var(--text-muted); }
 
 /* ---------- Rule Setting ---------- */
 .rule-form { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
@@ -213,7 +214,14 @@ body {
 .wheel-item-row:last-child { border-bottom: none; }
 .no-effect-tag { color: var(--text-muted); font-size: 10px; }
 .wheel-canvas-col { display: flex; flex-direction: column; align-items: center; gap: 12px; }
-.wheel-canvas-col canvas { transition: transform 4s cubic-bezier(0.17, 0.67, 0.12, 0.99); max-width: 100%; height: auto; }
+.wheel-canvas-wrap { position: relative; display: inline-block; max-width: 100%; }
+.wheel-canvas-wrap canvas { transition: transform 4s cubic-bezier(0.17, 0.67, 0.12, 0.99); max-width: 100%; height: auto; display: block; }
+.wheel-pointer {
+    position: absolute; top: 4px; left: 50%; transform: translateX(-50%);
+    width: 0; height: 0; z-index: 2; pointer-events: none;
+    border-left: 15px solid transparent; border-right: 15px solid transparent;
+    border-top: 28px solid #1A1A1A;
+}
 .spin-btn { padding: 10px 26px; border-radius: 0; border: none; background: var(--gold); color: #FFFFFF; font-weight: 700; cursor: pointer; font-family: inherit; }
 .spin-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .wheel-spin-history { margin-top: 16px; border-top: 1px solid var(--border-soft); padding-top: 12px; }

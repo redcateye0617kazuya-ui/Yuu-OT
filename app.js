@@ -41,6 +41,9 @@ let lastLiveHoursUpdateTime = null;
 let lastPendingSpinsUpdateTime = null;
 let presenceHeartbeatInterval = null;
 let myCurrentTab = "dashboard";
+let fxRatesCache = null;
+let fxRatesFetchedAt = 0;
+const FX_CACHE_TTL_MS = 6 * 3600000;
 
 // ==========================================
 // 工具函數
@@ -91,6 +94,40 @@ function formatMs(ms) {
 
 function hkTimeString(ts) {
     return new Date(ts).toLocaleString("en-US", { timeZone: "Asia/Hong_Kong" });
+}
+
+function elapsedSessionTimeStr(eventTimeMs) {
+    const sessionStart = campaignCache && campaignCache.currentSession && campaignCache.currentSession.sessionStartTime;
+    if (!sessionStart) return formatMs(0);
+    return formatMs(eventTimeMs - sessionStart);
+}
+
+// ==========================================
+// 貨幣轉換：SuperChat 原幣種自動轉做 HKD
+// ==========================================
+async function ensureFxRates() {
+    if (fxRatesCache && (Date.now() - fxRatesFetchedAt) < FX_CACHE_TTL_MS) return fxRatesCache;
+    try {
+        const res = await fetch("https://open.er-api.com/v6/latest/HKD");
+        if (!res.ok) throw new Error(`FX API 回應錯誤 ${res.status}`);
+        const data = await res.json();
+        if (data && data.rates) {
+            fxRatesCache = data.rates;
+            fxRatesFetchedAt = Date.now();
+        }
+    } catch (e) {
+        console.error("攞唔到即時匯率，SuperChat 金額會當係港紙處理：", e);
+    }
+    return fxRatesCache;
+}
+
+async function convertToHKD(amount, currencyCode) {
+    const code = (currencyCode || "HKD").toUpperCase();
+    if (code === "HKD") return amount;
+    const rates = await ensureFxRates();
+    const rate = rates && rates[code];
+    if (!rate) return amount;
+    return amount / rate;
 }
 
 function mergeLeaderboards(scList, paymeList) {
@@ -324,13 +361,18 @@ function renderSessionFeed(containerId, events) {
         return;
     }
     const newestFirst = [...events].reverse();
-    container.innerHTML = newestFirst.map((e) => `
+    container.innerHTML = newestFirst.map((e) => {
+        const fxHint = (e.originalCurrency && e.originalAmount != null)
+            ? ` <span class="feed-fx-hint">(${escapeHtml(e.originalCurrency)} ${e.originalAmount.toLocaleString()})</span>`
+            : "";
+        return `
         <div class="session-feed-row">
             <span class="feed-name">${escapeHtml(e.name)}</span>
-            <span class="feed-amount">$HKD ${(e.amount || 0).toLocaleString()}</span>
+            <span class="feed-amount">$HKD ${(e.amount || 0).toLocaleString()}${fxHint}</span>
             <span class="feed-time">${escapeHtml(e.time || "")}</span>
         </div>
-    `).join("");
+    `;
+    }).join("");
 }
 
 // ==========================================
@@ -548,7 +590,7 @@ async function resetCampaign() {
 // ==========================================
 // 課金（SuperChat / PayMe）寫入 + 規則引擎重算
 // ==========================================
-async function addContributionAndRecalc({ isSuperChat, id, name, amount, time, message }) {
+async function addContributionAndRecalc({ isSuperChat, id, name, amount, eventTimeMs, message, originalAmount, originalCurrency }) {
     const snap = await getDoc(campaignRef);
     if (!snap.exists()) return false;
     const data = snap.data();
@@ -557,7 +599,14 @@ async function addContributionAndRecalc({ isSuperChat, id, name, amount, time, m
     const sessionEvents = data[sessionKey] || [];
     if (sessionEvents.some((e) => e.id === id)) return false;
 
-    sessionEvents.push({ id, name, amount, time, message: message || "" });
+    const sessionStart = (data.currentSession && data.currentSession.sessionStartTime) || eventTimeMs;
+    const time = formatMs(eventTimeMs - sessionStart);
+    const event = { id, name, amount, time, message: message || "" };
+    if (originalCurrency && originalCurrency !== "HKD") {
+        event.originalAmount = originalAmount;
+        event.originalCurrency = originalCurrency;
+    }
+    sessionEvents.push(event);
 
     const lbKey = isSuperChat ? "leaderboardSc" : "leaderboardPayme";
     const leaderboard = data[lbKey] || [];
@@ -588,12 +637,14 @@ async function addContributionAndRecalc({ isSuperChat, id, name, amount, time, m
 // ==========================================
 // 送會員（Membership Gifting）監聽
 // ==========================================
-async function addMembershipGiftEvent({ id, name, count, time }) {
+async function addMembershipGiftEvent({ id, name, count, eventTimeMs }) {
     const snap = await getDoc(campaignRef);
     if (!snap.exists()) return;
     const data = snap.data();
     const events = data.currentSessionMembershipEvents || [];
     if (events.some((e) => e.id === id)) return;
+    const sessionStart = (data.currentSession && data.currentSession.sessionStartTime) || eventTimeMs;
+    const time = formatMs(eventTimeMs - sessionStart);
     events.push({ id, name, count, time });
 
     await updateDoc(campaignRef, { currentSessionMembershipEvents: events });
@@ -608,7 +659,7 @@ async function applyAmountSpinCreditRules(amount, name) {
         if (!wheel.spinRuleAmountEnabled || !(wheel.spinRuleAmount > 0)) continue;
         const creditsToAdd = Math.floor(amount / wheel.spinRuleAmount);
         if (creditsToAdd > 0) {
-            const newEntries = Array.from({ length: creditsToAdd }, () => ({ id: genId(), name, source: "課金", time: Date.now() }));
+            const newEntries = Array.from({ length: creditsToAdd }, () => ({ id: genId(), name, source: "課金", time: elapsedSessionTimeStr(Date.now()) }));
             const spinQueue = [...(wheel.spinQueue || []), ...newEntries];
             await updateDoc(doc(db, "wheels", wheel.id), { spinQueue });
         }
@@ -620,7 +671,7 @@ async function applyMembershipSpinCreditRules(giftCount, name) {
         if (!wheel.spinRuleMembershipEnabled || !(wheel.spinRuleMembershipCount > 0)) continue;
         const creditsToAdd = Math.floor(giftCount / wheel.spinRuleMembershipCount);
         if (creditsToAdd > 0) {
-            const newEntries = Array.from({ length: creditsToAdd }, () => ({ id: genId(), name, source: "送會員", time: Date.now() }));
+            const newEntries = Array.from({ length: creditsToAdd }, () => ({ id: genId(), name, source: "送會員", time: elapsedSessionTimeStr(Date.now()) }));
             const spinQueue = [...(wheel.spinQueue || []), ...newEntries];
             await updateDoc(doc(db, "wheels", wheel.id), { spinQueue });
         }
@@ -643,7 +694,7 @@ async function checkDailySpinCredits() {
         if (!wheel.spinRuleDailyEnabled || !wheel.spinRuleDailyTime) continue;
         if (wheel.spinRuleDailyLastGrantDate === todayStr) continue;
         if (nowHHMM < wheel.spinRuleDailyTime) continue;
-        const spinQueue = [...(wheel.spinQueue || []), { id: genId(), name: "每日獎勵", source: "每日", time: Date.now() }];
+        const spinQueue = [...(wheel.spinQueue || []), { id: genId(), name: "每日獎勵", source: "每日", time: elapsedSessionTimeStr(Date.now()) }];
         await updateDoc(doc(db, "wheels", wheel.id), {
             spinQueue,
             spinRuleDailyLastGrantDate: todayStr
@@ -668,7 +719,7 @@ async function addPayme() {
         isSuperChat: false,
         id: genId(),
         name, amount,
-        time: new Date().toLocaleTimeString("en-US", { timeZone: "Asia/Hong_Kong", hour12: false }),
+        eventTimeMs: Date.now(),
         message: ""
     });
     nameInput.value = "";
@@ -696,13 +747,17 @@ function startScPolling(liveChatId, apiKey) {
                 if (item.snippet.type === "superChatEvent") {
                     const scDetails = item.snippet.superChatDetails;
                     if (!scDetails) continue;
-                    const amount = scDetails.amountMicros ? scDetails.amountMicros / 1000000 : 0;
+                    const rawAmount = scDetails.amountMicros ? scDetails.amountMicros / 1000000 : 0;
+                    const currencyCode = (scDetails.currency || "HKD").toUpperCase();
+                    const amount = await convertToHKD(rawAmount, currencyCode);
                     await addContributionAndRecalc({
                         isSuperChat: true,
                         id: item.id,
                         name: item.authorDetails.displayName,
                         amount,
-                        time: new Date(item.snippet.publishedAt).toLocaleTimeString("en-US", { timeZone: "Asia/Hong_Kong", hour12: false }),
+                        originalAmount: rawAmount,
+                        originalCurrency: currencyCode,
+                        eventTimeMs: new Date(item.snippet.publishedAt).getTime(),
                         message: scDetails.userComment || ""
                     });
                 } else if (item.snippet.type === "membershipGiftingEvent") {
@@ -712,7 +767,7 @@ function startScPolling(liveChatId, apiKey) {
                         id: item.id,
                         name: item.authorDetails.displayName,
                         count: giftDetails.giftMembershipsCount || 0,
-                        time: new Date(item.snippet.publishedAt).toLocaleTimeString("en-US", { timeZone: "Asia/Hong_Kong", hour12: false })
+                        eventTimeMs: new Date(item.snippet.publishedAt).getTime()
                     });
                 }
             }
@@ -857,20 +912,13 @@ function drawWheel(canvas, items) {
         ctx.rotate(flipped ? midAngle + Math.PI : midAngle);
         ctx.textAlign = flipped ? "left" : "right";
         ctx.fillStyle = "#FFFFFF";
-        ctx.font = "bold 17px sans-serif";
-        const label = item.label.length > 14 ? item.label.slice(0, 14) + "…" : item.label;
-        ctx.fillText(label, flipped ? -(r - 20) : (r - 20), 6);
+        ctx.font = "bold 22px sans-serif";
+        const label = item.label.length > 10 ? item.label.slice(0, 10) + "…" : item.label;
+        const textRadius = r * 0.6;
+        ctx.fillText(label, flipped ? -textRadius : textRadius, 8);
         ctx.restore();
     });
     ctx.restore();
-
-    ctx.beginPath();
-    ctx.moveTo(cx - 14, 10);
-    ctx.lineTo(cx + 14, 10);
-    ctx.lineTo(cx, 36);
-    ctx.closePath();
-    ctx.fillStyle = "#1A1A1A";
-    ctx.fill();
 }
 
 function renderWheels() {
@@ -921,7 +969,7 @@ function buildWheelBlock(wheel) {
                 ${queue.length === 0 ? '<div class="empty-hint">暫時未有排緊隊嘅機會</div>' : queue.map((q) => `
                     <div class="wheel-queue-row">
                         <span class="feed-name">${escapeHtml(q.name || "")}</span>
-                        <span class="feed-time">${q.source ? escapeHtml(q.source) : ""} ${hkTimeString(q.time)}</span>
+                        <span class="feed-time">${q.source ? escapeHtml(q.source) : ""} ${escapeHtml(q.time || "")}</span>
                     </div>
                 `).join("")}
             </div>
@@ -944,7 +992,10 @@ function buildWheelBlock(wheel) {
                 </div>
             </div>
             <div class="wheel-canvas-col">
-                <canvas id="wheelCanvas_${wheel.id}" width="400" height="400"></canvas>
+                <div class="wheel-canvas-wrap">
+                    <canvas id="wheelCanvas_${wheel.id}" width="400" height="400"></canvas>
+                    <div class="wheel-pointer"></div>
+                </div>
                 <button type="button" class="spin-btn">轉！</button>
             </div>
         </div>
@@ -953,7 +1004,7 @@ function buildWheelBlock(wheel) {
             <div class="wheel-spin-list">
                 ${spins.length === 0 ? '<div class="empty-hint">未有轉過</div>' : spins.slice().reverse().map((s) => `
                     <div class="wheel-spin-row" data-spin-id="${s.id}">
-                        <span>${hkTimeString(s.timestamp)} - ${escapeHtml(s.resultLabel)}${s.effectHours != null ? `（${s.effectHours >= 0 ? "+" : ""}${s.effectHours}小時）` : ''}</span>
+                        <span>${escapeHtml(s.time || "")} - ${escapeHtml(s.resultLabel)}${s.effectHours != null ? `（${s.effectHours >= 0 ? "+" : ""}${s.effectHours}小時）` : ''}</span>
                         <button type="button" class="del-btn del-spin-btn">✕</button>
                     </div>
                 `).join("")}
@@ -1123,7 +1174,7 @@ async function applyWheelResult(wheel, chosenItem) {
         id: genId(),
         resultLabel: chosenItem.label,
         effectHours: chosenItem.effectHours,
-        timestamp: Date.now()
+        time: elapsedSessionTimeStr(Date.now())
     }];
     const requiresCredit = wheel.spinRuleAmountEnabled || wheel.spinRuleMembershipEnabled || wheel.spinRuleDailyEnabled;
     const updatePayload = { spins };
