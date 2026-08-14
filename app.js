@@ -149,13 +149,8 @@ function relativeTimeLabel(ts) {
 }
 
 function updateStatCards(data) {
-    const scTotal = (data.leaderboardSc || []).reduce((s, e) => s + (e.amount || 0), 0);
-    const paymeTotal = (data.leaderboardPayme || []).reduce((s, e) => s + (e.amount || 0), 0);
-
-    const scEl = document.getElementById("statScTotal");
-    const paymeEl = document.getElementById("statPaymeTotal");
-    if (scEl) scEl.textContent = `$${scTotal.toLocaleString()}`;
-    if (paymeEl) paymeEl.textContent = `$${paymeTotal.toLocaleString()}`;
+    const contribEl = document.getElementById("statContribTotal");
+    if (contribEl) contribEl.textContent = `$${(data.totalAmount || 0).toLocaleString()}`;
 
     lastCampaignUpdateTime = Date.now();
 }
@@ -169,10 +164,8 @@ function updatePendingSpinsStat() {
 
 function tickStatTimestamps() {
     const campaignLabel = relativeTimeLabel(lastCampaignUpdateTime);
-    ["statScUpdated", "statPaymeUpdated"].forEach((id) => {
-        const el = document.getElementById(id);
-        if (el) el.textContent = campaignLabel;
-    });
+    const contribUpdatedEl = document.getElementById("statContribUpdated");
+    if (contribUpdatedEl) contribUpdatedEl.textContent = campaignLabel;
     const pendingSpinsUpdatedEl = document.getElementById("statPendingSpinsUpdated");
     if (pendingSpinsUpdatedEl) pendingSpinsUpdatedEl.textContent = relativeTimeLabel(lastPendingSpinsUpdateTime);
     const liveHoursUpdatedEl = document.getElementById("statLiveHoursUpdated");
@@ -475,16 +468,7 @@ async function startSession() {
     alert(isFirstEverStart ? "成功開始馬拉松！" : "成功開始新直播 Session！");
 }
 
-async function cutOffSession() {
-    if (!confirm("確定要幫呢場直播埋數？（馬拉松總 Timer 會繼續行，唔會停）")) return;
-    stopScPolling();
-
-    const snap = await getDoc(campaignRef);
-    if (!snap.exists()) return;
-    const data = snap.data();
-    const session = data.currentSession;
-    if (!session || !session.active) { alert("而家冇進行緊嘅直播 Session"); return; }
-
+async function performCutOff(data, session) {
     const now = Date.now();
     const scEvents = data.currentSessionScEvents || [];
     const paymeEvents = data.currentSessionPaymeEvents || [];
@@ -507,7 +491,7 @@ async function cutOffSession() {
     } catch (e) {
         console.error("寫入單場直播記錄失敗: ", e);
         alert("寫入單場直播記錄失敗：" + e.message + "\n（請檢查 Firestore Rules 是否有開放 sessions collection 的寫入權限）");
-        return;
+        return false;
     }
 
     await updateDoc(campaignRef, {
@@ -517,7 +501,21 @@ async function cutOffSession() {
         currentSessionMembershipEvents: []
     });
     refreshLiveStats();
-    alert("埋數成功！馬拉松總 Timer 繼續行緊，可以隨時入新 Link 開新場。");
+    return true;
+}
+
+async function cutOffSession() {
+    if (!confirm("確定要幫呢場直播埋數？（馬拉松總 Timer 會繼續行，唔會停）")) return;
+    stopScPolling();
+
+    const snap = await getDoc(campaignRef);
+    if (!snap.exists()) return;
+    const data = snap.data();
+    const session = data.currentSession;
+    if (!session || !session.active) { alert("而家冇進行緊嘅直播 Session"); return; }
+
+    const ok = await performCutOff(data, session);
+    if (ok) alert("埋數成功！馬拉松總 Timer 繼續行緊，可以隨時入新 Link 開新場。");
 }
 
 async function togglePause() {
@@ -565,26 +563,42 @@ async function finishMarathon() {
         alert("馬拉松未開始或者已經完成，冇嘢好完成。");
         return;
     }
-    if (data.currentSession && data.currentSession.active) {
-        alert("而家仲有直播 Session 進行緊，請先 Cut Off 埋數先可以完成直播。");
-        return;
-    }
-    if (!confirm("確定要完成成個直播馬拉松？完成之後就唔可以再開新 Session 或者加鐘，直到你「重設馬拉松」開新一輪為止。")) return;
+    const hasActiveSession = data.currentSession && data.currentSession.active;
+    const confirmMsg = hasActiveSession
+        ? "確定要完成成個直播馬拉松？呢個動作會自動幫而家進行緊嘅直播 Session 埋數，完成之後就唔可以再開新 Session 或者加鐘，直到你「重設馬拉松」開新一輪為止。"
+        : "確定要完成成個直播馬拉松？完成之後就唔可以再開新 Session 或者加鐘，直到你「重設馬拉松」開新一輪為止。";
+    if (!confirm(confirmMsg)) return;
+
     stopScPolling();
+    if (hasActiveSession) {
+        const ok = await performCutOff(data, data.currentSession);
+        if (!ok) return;
+    }
     await updateDoc(campaignRef, { status: "ended", isPaused: false });
     alert("直播馬拉松已經完成！");
 }
 
 async function resetCampaign() {
-    if (!confirm("確定要完全重設成個馬拉松？呢個動作會清空 Total 金額、排行榜同 Timer，但唔會刪走已經 Cut Off 嘅單場 Record。")) return;
-    if (!confirm("再次確認：真係要重設？此動作無法復原。")) return;
+    if (!confirm("確定要完全重設？呢個動作會清空主控台（Total 金額、排行榜、Timer、API Key），同埋刪走所有加鐘規則、所有輪盤設定，同埋所有已經 Cut Off 嘅單場直播記錄（Record/Report 歷史）。呢個係全站重設，唔淨係主控台。")) return;
+    if (!confirm("再次確認：呢個動作無法復原，會刪晒 Rule Setting、輪盤、Record/Report 嘅所有資料。真係要重設？")) return;
     stopScPolling();
+
+    const [rulesSnap, wheelsSnap, sessionsSnap] = await Promise.all([
+        getDocs(rulesColRef), getDocs(wheelsColRef), getDocs(sessionsColRef)
+    ]);
+    await Promise.all([
+        ...rulesSnap.docs.map((d) => deleteDoc(doc(db, "rules", d.id))),
+        ...wheelsSnap.docs.map((d) => deleteDoc(doc(db, "wheels", d.id))),
+        ...sessionsSnap.docs.map((d) => deleteDoc(doc(db, "sessions", d.id)))
+    ]);
+
     await setDoc(campaignRef, {
         status: "idle", isPaused: false, startTime: null, targetEndTime: null, pausedRemainingMs: 0,
         totalAmount: 0, bonusMsGranted: 0, leaderboardSc: [], leaderboardPayme: [],
         currentSession: { active: false }, currentSessionScEvents: [], currentSessionPaymeEvents: [],
         currentSessionMembershipEvents: []
     });
+    alert("已經全站重設完成！");
 }
 
 // ==========================================
