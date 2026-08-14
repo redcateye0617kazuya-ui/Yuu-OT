@@ -68,6 +68,12 @@ async function convertToHKD(amount, currencyCode) {
     return amount / rate;
 }
 
+function levelMatchesFilter(levelName, filterStr) {
+    if (!filterStr || !filterStr.trim()) return true;
+    const allowed = filterStr.split(",").map((s) => s.trim()).filter(Boolean);
+    return allowed.includes((levelName || "").trim());
+}
+
 async function main() {
     const campaignRef = db.collection("campaign").doc("main");
     const campaignSnap = await campaignRef.get();
@@ -173,7 +179,7 @@ async function main() {
             const eventTimeMs = new Date(item.snippet.publishedAt).getTime();
             const time = formatMs(eventTimeMs - sessionStart);
             milestoneEvents.push({ id, name, memberMonth, memberLevelName, message: milestoneDetails.userComment || "", time });
-            milestoneCreditQueueAdds.push({ name, memberMonth });
+            milestoneCreditQueueAdds.push({ name, memberMonth, memberLevelName });
             anyNew = true;
         } else if (item.snippet.type === "newSponsorEvent") {
             const newSponsorDetails = item.snippet.newSponsorDetails;
@@ -187,7 +193,7 @@ async function main() {
             const eventTimeMs = new Date(item.snippet.publishedAt).getTime();
             const time = formatMs(eventTimeMs - sessionStart);
             newSponsorEvents.push({ id, name, memberLevelName, isUpgrade, time });
-            newSponsorCreditQueueAdds.push({ name });
+            newSponsorCreditQueueAdds.push({ name, memberLevelName });
             anyNew = true;
         }
     }
@@ -241,13 +247,15 @@ async function main() {
             }
         }
         if (wheel.spinRuleMilestoneEnabled) {
-            for (const { name, memberMonth } of milestoneCreditQueueAdds) {
+            for (const { name, memberMonth, memberLevelName } of milestoneCreditQueueAdds) {
                 if ((memberMonth || 0) < (wheel.spinRuleMilestoneMonths || 0)) continue;
+                if (!levelMatchesFilter(memberLevelName, wheel.spinRuleMilestoneLevel)) continue;
                 newEntries.push({ id: crypto.randomUUID(), name, source: "會員里程碑", time: formatMs(Date.now() - sessionStart) });
             }
         }
         if (wheel.spinRuleNewSponsorEnabled) {
-            for (const { name } of newSponsorCreditQueueAdds) {
+            for (const { name, memberLevelName } of newSponsorCreditQueueAdds) {
+                if (!levelMatchesFilter(memberLevelName, wheel.spinRuleNewSponsorLevel)) continue;
                 newEntries.push({ id: crypto.randomUUID(), name, source: "新／升級會員", time: formatMs(Date.now() - sessionStart) });
             }
         }
