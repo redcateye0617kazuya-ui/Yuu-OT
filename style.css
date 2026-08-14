@@ -88,7 +88,7 @@ body {
     grid-template-columns: 1fr 1fr 340px 1fr;
     grid-template-rows: auto auto auto;
     grid-template-areas:
-        "stat1 stat2 timer board"
+        "total total timer board"
         "stat3 stat4 timer board"
         "control control control board"
         "sessionfeeds sessionfeeds sessionfeeds board";
@@ -260,8 +260,7 @@ body {
     .dashboard-grid {
         grid-template-columns: 1fr;
         grid-template-areas:
-            "stat1"
-            "stat2"
+            "total"
             "stat3"
             "stat4"
             "timer"
@@ -276,8 +275,7 @@ body {
     .dashboard-grid {
         grid-template-areas:
             "timer"
-            "stat1"
-            "stat2"
+            "total"
             "stat3"
             "stat4"
             "control"
