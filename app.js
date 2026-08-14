@@ -447,7 +447,8 @@ async function startSession() {
         currentSessionScEvents: [],
         currentSessionPaymeEvents: [],
         currentSessionMembershipEvents: [],
-        currentSessionMilestoneEvents: []
+        currentSessionMilestoneEvents: [],
+        currentSessionNewSponsorEvents: []
     };
 
     if (isFirstEverStart) {
@@ -500,7 +501,8 @@ async function performCutOff(data, session) {
         currentSessionScEvents: [],
         currentSessionPaymeEvents: [],
         currentSessionMembershipEvents: [],
-        currentSessionMilestoneEvents: []
+        currentSessionMilestoneEvents: [],
+        currentSessionNewSponsorEvents: []
     });
     refreshLiveStats();
     return true;
@@ -598,7 +600,8 @@ async function resetCampaign() {
         status: "idle", isPaused: false, startTime: null, targetEndTime: null, pausedRemainingMs: 0,
         totalAmount: 0, bonusMsGranted: 0, leaderboardSc: [], leaderboardPayme: [],
         currentSession: { active: false }, currentSessionScEvents: [], currentSessionPaymeEvents: [],
-        currentSessionMembershipEvents: [], currentSessionMilestoneEvents: []
+        currentSessionMembershipEvents: [], currentSessionMilestoneEvents: [],
+        currentSessionNewSponsorEvents: []
     });
     alert("已經全站重設完成！");
 }
@@ -685,6 +688,23 @@ async function addMilestoneEvent({ id, name, memberMonth, memberLevelName, messa
 }
 
 // ==========================================
+// 新會員加入／升級會員等級（New Sponsor）監聽
+// ==========================================
+async function addNewSponsorEvent({ id, name, memberLevelName, isUpgrade, eventTimeMs }) {
+    const snap = await getDoc(campaignRef);
+    if (!snap.exists()) return;
+    const data = snap.data();
+    const events = data.currentSessionNewSponsorEvents || [];
+    if (events.some((e) => e.id === id)) return;
+    const sessionStart = (data.currentSession && data.currentSession.sessionStartTime) || eventTimeMs;
+    const time = formatMs(eventTimeMs - sessionStart);
+    events.push({ id, name, memberLevelName: memberLevelName || "", isUpgrade: !!isUpgrade, time });
+
+    await updateDoc(campaignRef, { currentSessionNewSponsorEvents: events });
+    await applyNewSponsorSpinCreditRules(name);
+}
+
+// ==========================================
 // 抽獎機會：逐個輪盤自訂規則
 // ==========================================
 async function applyAmountSpinCreditRules(amount, name) {
@@ -716,6 +736,15 @@ async function applyMilestoneSpinCreditRules(memberMonth, name) {
         if (!wheel.spinRuleMilestoneEnabled) continue;
         if ((memberMonth || 0) < (wheel.spinRuleMilestoneMonths || 0)) continue;
         const newEntry = { id: genId(), name, source: "會員里程碑", time: elapsedSessionTimeStr(Date.now()) };
+        const spinQueue = [...(wheel.spinQueue || []), newEntry];
+        await updateDoc(doc(db, "wheels", wheel.id), { spinQueue });
+    }
+}
+
+async function applyNewSponsorSpinCreditRules(name) {
+    for (const wheel of wheelsCache) {
+        if (!wheel.spinRuleNewSponsorEnabled) continue;
+        const newEntry = { id: genId(), name, source: "新／升級會員", time: elapsedSessionTimeStr(Date.now()) };
         const spinQueue = [...(wheel.spinQueue || []), newEntry];
         await updateDoc(doc(db, "wheels", wheel.id), { spinQueue });
     }
@@ -821,6 +850,16 @@ function startScPolling(liveChatId, apiKey) {
                         memberMonth: milestoneDetails.memberMonth || 0,
                         memberLevelName: milestoneDetails.memberLevelName || "",
                         message: milestoneDetails.userComment || "",
+                        eventTimeMs: new Date(item.snippet.publishedAt).getTime()
+                    });
+                } else if (item.snippet.type === "newSponsorEvent") {
+                    const newSponsorDetails = item.snippet.newSponsorDetails;
+                    if (!newSponsorDetails) continue;
+                    await addNewSponsorEvent({
+                        id: item.id,
+                        name: item.authorDetails.displayName,
+                        memberLevelName: newSponsorDetails.memberLevelName || "",
+                        isUpgrade: !!newSponsorDetails.isUpgrade,
                         eventTimeMs: new Date(item.snippet.publishedAt).getTime()
                     });
                 }
@@ -1019,9 +1058,13 @@ function buildWheelBlock(wheel) {
                 會員里程碑留言達 <input type="number" class="wr-milestone-value" value="${wheel.spinRuleMilestoneMonths || ""}" placeholder="個月" style="display:${wheel.spinRuleMilestoneEnabled ? "" : "none"};">
                 個月或以上 送一次機會
             </label>
+            <label class="spin-rule-label">
+                <input type="checkbox" class="wr-newsponsor-enabled" ${wheel.spinRuleNewSponsorEnabled ? "checked" : ""}>
+                有新會員加入／升級會員等級 送一次機會
+            </label>
             <button type="button" class="save-wheel-rules-btn">儲存規則</button>
         </div>
-        ${(wheel.spinRuleAmountEnabled || wheel.spinRuleMembershipEnabled || wheel.spinRuleDailyEnabled || wheel.spinRuleMilestoneEnabled) ? `
+        ${(wheel.spinRuleAmountEnabled || wheel.spinRuleMembershipEnabled || wheel.spinRuleDailyEnabled || wheel.spinRuleMilestoneEnabled || wheel.spinRuleNewSponsorEnabled) ? `
         <div class="wheel-spin-queue">
             <div class="wheel-spin-history-title">抽獎機會排隊 List <span class="panel-subtitle">由舊到新，最上面下一個轉</span></div>
             <div class="wheel-queue-list">
@@ -1130,6 +1173,7 @@ async function addWheel() {
         spinRuleMembershipEnabled: false, spinRuleMembershipCount: 0,
         spinRuleDailyEnabled: false, spinRuleDailyTime: "", spinRuleDailyLastGrantDate: null,
         spinRuleMilestoneEnabled: false, spinRuleMilestoneMonths: 0,
+        spinRuleNewSponsorEnabled: false,
         spinQueue: []
     });
 }
@@ -1147,6 +1191,7 @@ async function saveWheelSpinRules(wheelId, blockEl) {
     const dailyValue = blockEl.querySelector(".wr-daily-value").value || "";
     const milestoneEnabled = blockEl.querySelector(".wr-milestone-enabled").checked;
     const milestoneValue = parseInt(blockEl.querySelector(".wr-milestone-value").value, 10) || 0;
+    const newSponsorEnabled = blockEl.querySelector(".wr-newsponsor-enabled").checked;
 
     await updateDoc(doc(db, "wheels", wheelId), {
         spinRuleAmountEnabled: amountEnabled,
@@ -1156,7 +1201,8 @@ async function saveWheelSpinRules(wheelId, blockEl) {
         spinRuleDailyEnabled: dailyEnabled,
         spinRuleDailyTime: dailyValue,
         spinRuleMilestoneEnabled: milestoneEnabled,
-        spinRuleMilestoneMonths: milestoneValue
+        spinRuleMilestoneMonths: milestoneValue,
+        spinRuleNewSponsorEnabled: newSponsorEnabled
     });
     alert("已儲存呢個輪盤嘅抽獎機會規則");
 }
