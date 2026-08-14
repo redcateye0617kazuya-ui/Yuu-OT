@@ -446,7 +446,8 @@ async function startSession() {
         },
         currentSessionScEvents: [],
         currentSessionPaymeEvents: [],
-        currentSessionMembershipEvents: []
+        currentSessionMembershipEvents: [],
+        currentSessionMilestoneEvents: []
     };
 
     if (isFirstEverStart) {
@@ -498,7 +499,8 @@ async function performCutOff(data, session) {
         currentSession: { active: false },
         currentSessionScEvents: [],
         currentSessionPaymeEvents: [],
-        currentSessionMembershipEvents: []
+        currentSessionMembershipEvents: [],
+        currentSessionMilestoneEvents: []
     });
     refreshLiveStats();
     return true;
@@ -596,7 +598,7 @@ async function resetCampaign() {
         status: "idle", isPaused: false, startTime: null, targetEndTime: null, pausedRemainingMs: 0,
         totalAmount: 0, bonusMsGranted: 0, leaderboardSc: [], leaderboardPayme: [],
         currentSession: { active: false }, currentSessionScEvents: [], currentSessionPaymeEvents: [],
-        currentSessionMembershipEvents: []
+        currentSessionMembershipEvents: [], currentSessionMilestoneEvents: []
     });
     alert("已經全站重設完成！");
 }
@@ -666,6 +668,23 @@ async function addMembershipGiftEvent({ id, name, count, eventTimeMs }) {
 }
 
 // ==========================================
+// 會員里程碑留言（Member Milestone Chat）監聽
+// ==========================================
+async function addMilestoneEvent({ id, name, memberMonth, memberLevelName, message, eventTimeMs }) {
+    const snap = await getDoc(campaignRef);
+    if (!snap.exists()) return;
+    const data = snap.data();
+    const events = data.currentSessionMilestoneEvents || [];
+    if (events.some((e) => e.id === id)) return;
+    const sessionStart = (data.currentSession && data.currentSession.sessionStartTime) || eventTimeMs;
+    const time = formatMs(eventTimeMs - sessionStart);
+    events.push({ id, name, memberMonth, memberLevelName: memberLevelName || "", message: message || "", time });
+
+    await updateDoc(campaignRef, { currentSessionMilestoneEvents: events });
+    await applyMilestoneSpinCreditRules(memberMonth, name);
+}
+
+// ==========================================
 // 抽獎機會：逐個輪盤自訂規則
 // ==========================================
 async function applyAmountSpinCreditRules(amount, name) {
@@ -689,6 +708,16 @@ async function applyMembershipSpinCreditRules(giftCount, name) {
             const spinQueue = [...(wheel.spinQueue || []), ...newEntries];
             await updateDoc(doc(db, "wheels", wheel.id), { spinQueue });
         }
+    }
+}
+
+async function applyMilestoneSpinCreditRules(memberMonth, name) {
+    for (const wheel of wheelsCache) {
+        if (!wheel.spinRuleMilestoneEnabled) continue;
+        if ((memberMonth || 0) < (wheel.spinRuleMilestoneMonths || 0)) continue;
+        const newEntry = { id: genId(), name, source: "會員里程碑", time: elapsedSessionTimeStr(Date.now()) };
+        const spinQueue = [...(wheel.spinQueue || []), newEntry];
+        await updateDoc(doc(db, "wheels", wheel.id), { spinQueue });
     }
 }
 
@@ -781,6 +810,17 @@ function startScPolling(liveChatId, apiKey) {
                         id: item.id,
                         name: item.authorDetails.displayName,
                         count: giftDetails.giftMembershipsCount || 0,
+                        eventTimeMs: new Date(item.snippet.publishedAt).getTime()
+                    });
+                } else if (item.snippet.type === "memberMilestoneChatEvent") {
+                    const milestoneDetails = item.snippet.memberMilestoneChatDetails;
+                    if (!milestoneDetails) continue;
+                    await addMilestoneEvent({
+                        id: item.id,
+                        name: item.authorDetails.displayName,
+                        memberMonth: milestoneDetails.memberMonth || 0,
+                        memberLevelName: milestoneDetails.memberLevelName || "",
+                        message: milestoneDetails.userComment || "",
                         eventTimeMs: new Date(item.snippet.publishedAt).getTime()
                     });
                 }
@@ -974,9 +1014,14 @@ function buildWheelBlock(wheel) {
                 每日 <input type="time" class="wr-daily-value" value="${wheel.spinRuleDailyTime || ""}" style="display:${wheel.spinRuleDailyEnabled ? "" : "none"};">
                 送一次機會
             </label>
+            <label class="spin-rule-label">
+                <input type="checkbox" class="wr-milestone-enabled" ${wheel.spinRuleMilestoneEnabled ? "checked" : ""}>
+                會員里程碑留言達 <input type="number" class="wr-milestone-value" value="${wheel.spinRuleMilestoneMonths || ""}" placeholder="個月" style="display:${wheel.spinRuleMilestoneEnabled ? "" : "none"};">
+                個月或以上 送一次機會
+            </label>
             <button type="button" class="save-wheel-rules-btn">儲存規則</button>
         </div>
-        ${(wheel.spinRuleAmountEnabled || wheel.spinRuleMembershipEnabled || wheel.spinRuleDailyEnabled) ? `
+        ${(wheel.spinRuleAmountEnabled || wheel.spinRuleMembershipEnabled || wheel.spinRuleDailyEnabled || wheel.spinRuleMilestoneEnabled) ? `
         <div class="wheel-spin-queue">
             <div class="wheel-spin-history-title">抽獎機會排隊 List <span class="panel-subtitle">由舊到新，最上面下一個轉</span></div>
             <div class="wheel-queue-list">
@@ -1043,6 +1088,10 @@ function buildWheelBlock(wheel) {
     const dailyValueInput = block.querySelector(".wr-daily-value");
     dailyEnabledCb.addEventListener("change", () => { dailyValueInput.style.display = dailyEnabledCb.checked ? "" : "none"; });
 
+    const milestoneEnabledCb = block.querySelector(".wr-milestone-enabled");
+    const milestoneValueInput = block.querySelector(".wr-milestone-value");
+    milestoneEnabledCb.addEventListener("change", () => { milestoneValueInput.style.display = milestoneEnabledCb.checked ? "" : "none"; });
+
     block.querySelector(".save-wheel-rules-btn").addEventListener("click", () => saveWheelSpinRules(wheel.id, block));
     const affectsCheckbox = block.querySelector(".wheel-item-affects-timer");
     const hoursInputEl = block.querySelector(".wheel-item-hours");
@@ -1080,6 +1129,7 @@ async function addWheel() {
         spinRuleAmountEnabled: false, spinRuleAmount: 0,
         spinRuleMembershipEnabled: false, spinRuleMembershipCount: 0,
         spinRuleDailyEnabled: false, spinRuleDailyTime: "", spinRuleDailyLastGrantDate: null,
+        spinRuleMilestoneEnabled: false, spinRuleMilestoneMonths: 0,
         spinQueue: []
     });
 }
@@ -1095,6 +1145,8 @@ async function saveWheelSpinRules(wheelId, blockEl) {
     const membershipValue = parseInt(blockEl.querySelector(".wr-membership-value").value, 10) || 0;
     const dailyEnabled = blockEl.querySelector(".wr-daily-enabled").checked;
     const dailyValue = blockEl.querySelector(".wr-daily-value").value || "";
+    const milestoneEnabled = blockEl.querySelector(".wr-milestone-enabled").checked;
+    const milestoneValue = parseInt(blockEl.querySelector(".wr-milestone-value").value, 10) || 0;
 
     await updateDoc(doc(db, "wheels", wheelId), {
         spinRuleAmountEnabled: amountEnabled,
@@ -1102,7 +1154,9 @@ async function saveWheelSpinRules(wheelId, blockEl) {
         spinRuleMembershipEnabled: membershipEnabled,
         spinRuleMembershipCount: membershipValue,
         spinRuleDailyEnabled: dailyEnabled,
-        spinRuleDailyTime: dailyValue
+        spinRuleDailyTime: dailyValue,
+        spinRuleMilestoneEnabled: milestoneEnabled,
+        spinRuleMilestoneMonths: milestoneValue
     });
     alert("已儲存呢個輪盤嘅抽獎機會規則");
 }

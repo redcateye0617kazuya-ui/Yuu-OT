@@ -112,12 +112,14 @@ async function main() {
 
     const scEvents = [...(data.currentSessionScEvents || [])];
     const membershipEvents = [...(data.currentSessionMembershipEvents || [])];
+    const milestoneEvents = [...(data.currentSessionMilestoneEvents || [])];
     const leaderboardSc = [...(data.leaderboardSc || [])];
     let totalAmount = data.totalAmount || 0;
     const sessionStart = session.sessionStartTime || Date.now();
 
     const amountCreditQueueAdds = [];
     const membershipCreditQueueAdds = [];
+    const milestoneCreditQueueAdds = [];
     let anyNew = false;
 
     for (const item of items) {
@@ -157,12 +159,26 @@ async function main() {
             membershipEvents.push({ id, name, count, time });
             membershipCreditQueueAdds.push({ name, count });
             anyNew = true;
+        } else if (item.snippet.type === "memberMilestoneChatEvent") {
+            const milestoneDetails = item.snippet.memberMilestoneChatDetails;
+            if (!milestoneDetails) continue;
+            const id = item.id;
+            if (milestoneEvents.some((e) => e.id === id)) continue;
+
+            const name = item.authorDetails.displayName;
+            const memberMonth = milestoneDetails.memberMonth || 0;
+            const memberLevelName = milestoneDetails.memberLevelName || "";
+            const eventTimeMs = new Date(item.snippet.publishedAt).getTime();
+            const time = formatMs(eventTimeMs - sessionStart);
+            milestoneEvents.push({ id, name, memberMonth, memberLevelName, message: milestoneDetails.userComment || "", time });
+            milestoneCreditQueueAdds.push({ name, memberMonth });
+            anyNew = true;
         }
     }
 
     if (!anyNew) {
         await campaignRef.update({ scPollState: newPollState });
-        console.log("冇新嘅 SuperChat／送會員記錄。");
+        console.log("冇新嘅 SuperChat／送會員／會員里程碑記錄。");
         return;
     }
 
@@ -177,6 +193,7 @@ async function main() {
         bonusMsGranted: newBonusMs,
         currentSessionScEvents: scEvents,
         currentSessionMembershipEvents: membershipEvents,
+        currentSessionMilestoneEvents: milestoneEvents,
         leaderboardSc,
         scPollState: newPollState
     };
@@ -184,7 +201,7 @@ async function main() {
         updatePayload.targetEndTime = (data.targetEndTime || Date.now()) + deltaMs;
     }
     await campaignRef.update(updatePayload);
-    console.log(`已經寫入 ${amountCreditQueueAdds.length} 個 SuperChat、${membershipCreditQueueAdds.length} 個送會員記錄。`);
+    console.log(`已經寫入 ${amountCreditQueueAdds.length} 個 SuperChat、${membershipCreditQueueAdds.length} 個送會員、${milestoneCreditQueueAdds.length} 個會員里程碑記錄。`);
 
     const wheelsSnap = await db.collection("wheels").get();
     for (const wheelDoc of wheelsSnap.docs) {
@@ -204,6 +221,12 @@ async function main() {
                 for (let i = 0; i < n; i++) {
                     newEntries.push({ id: crypto.randomUUID(), name, source: "送會員", time: formatMs(Date.now() - sessionStart) });
                 }
+            }
+        }
+        if (wheel.spinRuleMilestoneEnabled) {
+            for (const { name, memberMonth } of milestoneCreditQueueAdds) {
+                if ((memberMonth || 0) < (wheel.spinRuleMilestoneMonths || 0)) continue;
+                newEntries.push({ id: crypto.randomUUID(), name, source: "會員里程碑", time: formatMs(Date.now() - sessionStart) });
             }
         }
         if (newEntries.length === 0) continue;
