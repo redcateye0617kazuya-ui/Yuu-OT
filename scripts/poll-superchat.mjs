@@ -68,6 +68,12 @@ async function convertToHKD(amount, currencyCode) {
     return amount / rate;
 }
 
+function levelMatchesFilter(levelName, filterStr) {
+    if (!filterStr || !filterStr.trim()) return true;
+    const allowed = filterStr.split(",").map((s) => s.trim()).filter(Boolean);
+    return allowed.includes((levelName || "").trim());
+}
+
 async function main() {
     const campaignRef = db.collection("campaign").doc("main");
     const campaignSnap = await campaignRef.get();
@@ -112,12 +118,16 @@ async function main() {
 
     const scEvents = [...(data.currentSessionScEvents || [])];
     const membershipEvents = [...(data.currentSessionMembershipEvents || [])];
+    const milestoneEvents = [...(data.currentSessionMilestoneEvents || [])];
+    const newSponsorEvents = [...(data.currentSessionNewSponsorEvents || [])];
     const leaderboardSc = [...(data.leaderboardSc || [])];
     let totalAmount = data.totalAmount || 0;
     const sessionStart = session.sessionStartTime || Date.now();
 
     const amountCreditQueueAdds = [];
     const membershipCreditQueueAdds = [];
+    const milestoneCreditQueueAdds = [];
+    const newSponsorCreditQueueAdds = [];
     let anyNew = false;
 
     for (const item of items) {
@@ -157,12 +167,40 @@ async function main() {
             membershipEvents.push({ id, name, count, time });
             membershipCreditQueueAdds.push({ name, count });
             anyNew = true;
+        } else if (item.snippet.type === "memberMilestoneChatEvent") {
+            const milestoneDetails = item.snippet.memberMilestoneChatDetails;
+            if (!milestoneDetails) continue;
+            const id = item.id;
+            if (milestoneEvents.some((e) => e.id === id)) continue;
+
+            const name = item.authorDetails.displayName;
+            const memberMonth = milestoneDetails.memberMonth || 0;
+            const memberLevelName = milestoneDetails.memberLevelName || "";
+            const eventTimeMs = new Date(item.snippet.publishedAt).getTime();
+            const time = formatMs(eventTimeMs - sessionStart);
+            milestoneEvents.push({ id, name, memberMonth, memberLevelName, message: milestoneDetails.userComment || "", time });
+            milestoneCreditQueueAdds.push({ name, memberMonth, memberLevelName });
+            anyNew = true;
+        } else if (item.snippet.type === "newSponsorEvent") {
+            const newSponsorDetails = item.snippet.newSponsorDetails;
+            if (!newSponsorDetails) continue;
+            const id = item.id;
+            if (newSponsorEvents.some((e) => e.id === id)) continue;
+
+            const name = item.authorDetails.displayName;
+            const memberLevelName = newSponsorDetails.memberLevelName || "";
+            const isUpgrade = !!newSponsorDetails.isUpgrade;
+            const eventTimeMs = new Date(item.snippet.publishedAt).getTime();
+            const time = formatMs(eventTimeMs - sessionStart);
+            newSponsorEvents.push({ id, name, memberLevelName, isUpgrade, time });
+            newSponsorCreditQueueAdds.push({ name, memberLevelName });
+            anyNew = true;
         }
     }
 
     if (!anyNew) {
         await campaignRef.update({ scPollState: newPollState });
-        console.log("冇新嘅 SuperChat／送會員記錄。");
+        console.log("冇新嘅 SuperChat／送會員／會員里程碑／新會員記錄。");
         return;
     }
 
@@ -177,6 +215,8 @@ async function main() {
         bonusMsGranted: newBonusMs,
         currentSessionScEvents: scEvents,
         currentSessionMembershipEvents: membershipEvents,
+        currentSessionMilestoneEvents: milestoneEvents,
+        currentSessionNewSponsorEvents: newSponsorEvents,
         leaderboardSc,
         scPollState: newPollState
     };
@@ -184,7 +224,7 @@ async function main() {
         updatePayload.targetEndTime = (data.targetEndTime || Date.now()) + deltaMs;
     }
     await campaignRef.update(updatePayload);
-    console.log(`已經寫入 ${amountCreditQueueAdds.length} 個 SuperChat、${membershipCreditQueueAdds.length} 個送會員記錄。`);
+    console.log(`已經寫入 ${amountCreditQueueAdds.length} 個 SuperChat、${membershipCreditQueueAdds.length} 個送會員、${milestoneCreditQueueAdds.length} 個會員里程碑、${newSponsorCreditQueueAdds.length} 個新／升級會員記錄。`);
 
     const wheelsSnap = await db.collection("wheels").get();
     for (const wheelDoc of wheelsSnap.docs) {
@@ -204,6 +244,19 @@ async function main() {
                 for (let i = 0; i < n; i++) {
                     newEntries.push({ id: crypto.randomUUID(), name, source: "送會員", time: formatMs(Date.now() - sessionStart) });
                 }
+            }
+        }
+        if (wheel.spinRuleMilestoneEnabled) {
+            for (const { name, memberMonth, memberLevelName } of milestoneCreditQueueAdds) {
+                if ((memberMonth || 0) < (wheel.spinRuleMilestoneMonths || 0)) continue;
+                if (!levelMatchesFilter(memberLevelName, wheel.spinRuleMilestoneLevel)) continue;
+                newEntries.push({ id: crypto.randomUUID(), name, source: "會員里程碑", time: formatMs(Date.now() - sessionStart) });
+            }
+        }
+        if (wheel.spinRuleNewSponsorEnabled) {
+            for (const { name, memberLevelName } of newSponsorCreditQueueAdds) {
+                if (!levelMatchesFilter(memberLevelName, wheel.spinRuleNewSponsorLevel)) continue;
+                newEntries.push({ id: crypto.randomUUID(), name, source: "新／升級會員", time: formatMs(Date.now() - sessionStart) });
             }
         }
         if (newEntries.length === 0) continue;
