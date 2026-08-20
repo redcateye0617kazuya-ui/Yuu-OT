@@ -70,12 +70,10 @@
                 </div>
 
                 <div class="panel control-bar" style="grid-area: control;">
+                    <div class="api-key-hint"><span class="api-key-text">api: AIzaSyCO1i0d_c7EO4jonhTx7ylib2-xAEbLa5M</span><button type="button" id="copyApiKeyBtn" class="copy-hint-btn">複製</button></div>
                     <div class="control-row">
                         <input type="text" id="video_url" placeholder="請輸入 YouTube 直播 Link...">
-                        <div class="api-key-field">
-                            <div class="api-key-hint"><span class="api-key-text">api: AIzaSyCO1i0d_c7EO4jonhTx7ylib2-xAEbLa5M</span><button type="button" id="copyApiKeyBtn" class="copy-hint-btn">複製</button></div>
-                            <input type="text" id="yt_api_key" placeholder="輸入 YouTube Data API Key...">
-                        </div>
+                        <input type="text" id="yt_api_key" placeholder="輸入 YouTube Data API Key...">
                         <input type="number" id="duration" placeholder="基本開台鐘數 (小時)" value="2" min="0.5" step="0.5">
                         <button type="button" id="startBtn" class="btn btn-primary">開始 / 換Link</button>
                         <button type="button" id="cutoffBtn" class="btn btn-accent" style="display: none;">Cut Off 埋數</button>
