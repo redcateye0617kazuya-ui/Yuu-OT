@@ -37,7 +37,6 @@ let rulesCache = [];
 let wheelsCache = [];
 const wheelRotationState = {};
 let lastCampaignUpdateTime = null;
-let lastLiveHoursUpdateTime = null;
 let lastPendingSpinsUpdateTime = null;
 let presenceHeartbeatInterval = null;
 let myCurrentTab = "dashboard";
@@ -168,24 +167,21 @@ function tickStatTimestamps() {
     if (contribUpdatedEl) contribUpdatedEl.textContent = campaignLabel;
     const pendingSpinsUpdatedEl = document.getElementById("statPendingSpinsUpdated");
     if (pendingSpinsUpdatedEl) pendingSpinsUpdatedEl.textContent = relativeTimeLabel(lastPendingSpinsUpdateTime);
-    const liveHoursUpdatedEl = document.getElementById("statLiveHoursUpdated");
-    if (liveHoursUpdatedEl) liveHoursUpdatedEl.textContent = relativeTimeLabel(lastLiveHoursUpdateTime);
+    updateLiveHoursStat();
 }
 
-async function refreshLiveStats() {
-    try {
-        const qs = await getDocs(sessionsColRef);
-        let totalMs = 0;
-        qs.forEach((d) => {
-            const s = d.data();
-            if (s.sessionStartTime && s.sessionEndTime) totalMs += (s.sessionEndTime - s.sessionStartTime);
-        });
-        const el = document.getElementById("statLiveHours");
-        if (el) el.textContent = `${(totalMs / 3600000).toFixed(1)}H`;
-        lastLiveHoursUpdateTime = Date.now();
-    } catch (e) {
-        console.error("讀取累積直播時數失敗:", e);
+function updateLiveHoursStat() {
+    const el = document.getElementById("statLiveHours");
+    if (!el) return;
+    const startTime = campaignCache && campaignCache.startTime;
+    if (!startTime) {
+        el.textContent = "0H";
+    } else {
+        const hours = Math.max(0, (Date.now() - startTime) / 3600000);
+        el.textContent = `${hours.toFixed(1)}H`;
     }
+    const updatedEl = document.getElementById("statLiveHoursUpdated");
+    if (updatedEl) updatedEl.textContent = "即時更新";
 }
 
 function extractVideoId(url) {
@@ -230,6 +226,20 @@ function computeIsTimeUp(data) {
     if (data.status !== "running" && data.status !== "paused") return false;
     const remaining = data.isPaused ? (data.pausedRemainingMs || 0) : ((data.targetEndTime || 0) - Date.now());
     return remaining <= 0;
+}
+
+// 將加/減鐘嘅 deltaMs 寫入正確嘅欄位：暫停緊就寫 pausedRemainingMs，行緊就寫 targetEndTime。
+// 呢個 helper 俾自動規則加鐘（addContributionAndRecalc/reapplyRulesToCampaign/editScAmount）共用，
+// 避免暫停期間淨係識更新 targetEndTime（暫停畫面睇嘅係 pausedRemainingMs，會令加鐘完全冇反映到）。
+function applyBonusTimeDelta(data, deltaMs, updatePayload) {
+    if (deltaMs === 0) return;
+    if (data.status !== "running" && data.status !== "paused") return;
+    if (computeIsTimeUp(data)) return;
+    if (data.isPaused) {
+        updatePayload.pausedRemainingMs = Math.max(0, (data.pausedRemainingMs || 0) + deltaMs);
+    } else {
+        updatePayload.targetEndTime = (data.targetEndTime || Date.now()) + deltaMs;
+    }
 }
 
 // ==========================================
@@ -304,15 +314,14 @@ function setupCampaignSync() {
             document.getElementById("endTimeBox").innerText = "收工時間：--";
         }
 
-        const totalText = `Total：$HKD ${(data.totalAmount || 0).toLocaleString()}`;
-        document.getElementById("totalAmountBox").innerText = totalText;
         const recordTotalBox = document.getElementById("recordTotalAmount");
-        if (recordTotalBox) recordTotalBox.innerText = totalText;
+        if (recordTotalBox) recordTotalBox.innerText = `Total：$HKD ${(data.totalAmount || 0).toLocaleString()}`;
 
         renderLeaderboard("scLeaderboard", mergeLeaderboards(data.leaderboardSc, data.leaderboardPayme));
-        renderSessionFeed("sessionPaymeFeed", data.currentSessionPaymeEvents);
-        renderSessionFeed("sessionScFeed", data.currentSessionScEvents);
+        renderSessionFeed("sessionPaymeFeed", data.currentSessionPaymeEvents, false);
+        renderSessionFeed("sessionScFeed", data.currentSessionScEvents, true);
         updateStatCards(data);
+        updateLiveHoursStat();
     }, (error) => notifyFirestoreError("Campaign", error));
 }
 
@@ -346,7 +355,7 @@ function renderLeaderboard(containerId, list) {
     `).join("");
 }
 
-function renderSessionFeed(containerId, events) {
+function renderSessionFeed(containerId, events, editable) {
     const container = document.getElementById(containerId);
     if (!container) return;
     if (!events || events.length === 0) {
@@ -358,14 +367,21 @@ function renderSessionFeed(containerId, events) {
         const fxHint = (e.originalCurrency && e.originalAmount != null)
             ? ` <span class="feed-fx-hint">(${escapeHtml(e.originalCurrency)} ${e.originalAmount.toLocaleString()})</span>`
             : "";
+        const editBtn = editable ? `<button type="button" class="edit-btn feed-edit-btn" data-event-id="${e.id}">✎</button>` : "";
         return `
         <div class="session-feed-row">
             <span class="feed-name">${escapeHtml(e.name)}</span>
             <span class="feed-amount">$HKD ${(e.amount || 0).toLocaleString()}${fxHint}</span>
             <span class="feed-time">${escapeHtml(e.time || "")}</span>
+            ${editBtn}
         </div>
     `;
     }).join("");
+    if (editable) {
+        container.querySelectorAll(".feed-edit-btn").forEach((btn) => {
+            btn.addEventListener("click", () => editScAmount(btn.dataset.eventId));
+        });
+    }
 }
 
 // ==========================================
@@ -504,7 +520,6 @@ async function performCutOff(data, session) {
         currentSessionMilestoneEvents: [],
         currentSessionNewSponsorEvents: []
     });
-    refreshLiveStats();
     return true;
 }
 
@@ -644,13 +659,53 @@ async function addContributionAndRecalc({ isSuperChat, id, name, amount, eventTi
         [sessionKey]: sessionEvents,
         [lbKey]: leaderboard
     };
-    if (deltaMs !== 0 && (data.status === "running" || data.status === "paused") && !computeIsTimeUp(data)) {
-        updatePayload.targetEndTime = (data.targetEndTime || Date.now()) + deltaMs;
-    }
+    applyBonusTimeDelta(data, deltaMs, updatePayload);
 
     await updateDoc(campaignRef, updatePayload);
     await applyAmountSpinCreditRules(amount, name);
     return true;
+}
+
+// 人手修正一筆已記錄嘅 SuperChat 金額（例如 YouTube API 幣值/金額有問題），
+// 會連同排行榜、Total、加鐘規則重新計算一次。
+async function editScAmount(eventId) {
+    const snap = await getDoc(campaignRef);
+    if (!snap.exists()) return;
+    const data = snap.data();
+    const events = data.currentSessionScEvents || [];
+    const event = events.find((e) => e.id === eventId);
+    if (!event) return;
+
+    const input = prompt(`修改「${event.name}」呢筆 SuperChat 金額 (HKD)：`, event.amount);
+    if (input === null) return;
+    const newAmount = parseFloat(input);
+    if (isNaN(newAmount) || newAmount < 0) { alert("請輸入有效金額"); return; }
+
+    const delta = newAmount - (event.amount || 0);
+    if (delta === 0) return;
+
+    event.amount = newAmount;
+    delete event.originalAmount;
+    delete event.originalCurrency;
+
+    const leaderboard = data.leaderboardSc || [];
+    const existing = leaderboard.find((e) => e.name === event.name);
+    if (existing) existing.amount = Math.max(0, existing.amount + delta);
+
+    const newTotal = Math.max(0, (data.totalAmount || 0) + delta);
+    const newBonusMs = computeBonusMs(newTotal, rulesCache);
+    const deltaMs = newBonusMs - (data.bonusMsGranted || 0);
+
+    const updatePayload = {
+        totalAmount: newTotal,
+        bonusMsGranted: newBonusMs,
+        currentSessionScEvents: events,
+        leaderboardSc: leaderboard
+    };
+    applyBonusTimeDelta(data, deltaMs, updatePayload);
+
+    await updateDoc(campaignRef, updatePayload);
+    alert("已更新呢筆 SuperChat 金額");
 }
 
 // ==========================================
@@ -928,9 +983,7 @@ async function reapplyRulesToCampaign() {
     const deltaMs = newBonusMs - (data.bonusMsGranted || 0);
     if (deltaMs === 0) return;
     const updatePayload = { bonusMsGranted: newBonusMs };
-    if (!computeIsTimeUp(data)) {
-        updatePayload.targetEndTime = (data.targetEndTime || Date.now()) + deltaMs;
-    }
+    applyBonusTimeDelta(data, deltaMs, updatePayload);
     await updateDoc(campaignRef, updatePayload);
 }
 
@@ -1481,7 +1534,6 @@ window.addEventListener("DOMContentLoaded", () => {
     setupCampaignSync();
     setupRulesSync();
     setupWheelsSync();
-    refreshLiveStats();
     if (!statTickInterval) statTickInterval = setInterval(tickStatTimestamps, 1000);
     checkDailySpinCredits();
     setInterval(checkDailySpinCredits, 30000);
@@ -1496,6 +1548,14 @@ window.addEventListener("DOMContentLoaded", () => {
     document.getElementById("addPaymeBtn").addEventListener("click", addPayme);
     document.getElementById("addRuleBtn").addEventListener("click", addRule);
     document.getElementById("addWheelBtn").addEventListener("click", addWheel);
+    document.getElementById("copyApiKeyBtn").addEventListener("click", async () => {
+        try {
+            await navigator.clipboard.writeText("AIzaSyCO1i0d_c7EO4jonhTx7ylib2-xAEbLa5M");
+            alert("已複製！");
+        } catch (e) {
+            alert("複製失敗，請手動長按選取複製。");
+        }
+    });
 
     document.querySelectorAll(".time-adjust-btn").forEach((btn) => {
         btn.addEventListener("click", () => adjustTime(parseInt(btn.dataset.deltaMs, 10)));

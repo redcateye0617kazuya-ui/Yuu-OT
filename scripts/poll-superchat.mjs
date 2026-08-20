@@ -45,6 +45,17 @@ function computeIsTimeUp(data) {
     return remaining <= 0;
 }
 
+function applyBonusTimeDelta(data, deltaMs, updatePayload) {
+    if (deltaMs === 0) return;
+    if (data.status !== "running" && data.status !== "paused") return;
+    if (computeIsTimeUp(data)) return;
+    if (data.isPaused) {
+        updatePayload.pausedRemainingMs = Math.max(0, (data.pausedRemainingMs || 0) + deltaMs);
+    } else {
+        updatePayload.targetEndTime = (data.targetEndTime || Date.now()) + deltaMs;
+    }
+}
+
 let fxRatesCache = null;
 async function ensureFxRates() {
     if (fxRatesCache) return fxRatesCache;
@@ -220,9 +231,7 @@ async function main() {
         leaderboardSc,
         scPollState: newPollState
     };
-    if (deltaMs !== 0 && !computeIsTimeUp(data)) {
-        updatePayload.targetEndTime = (data.targetEndTime || Date.now()) + deltaMs;
-    }
+    applyBonusTimeDelta(data, deltaMs, updatePayload);
     await campaignRef.update(updatePayload);
     console.log(`已經寫入 ${amountCreditQueueAdds.length} 個 SuperChat、${membershipCreditQueueAdds.length} 個送會員、${milestoneCreditQueueAdds.length} 個會員里程碑、${newSponsorCreditQueueAdds.length} 個新／升級會員記錄。`);
 
