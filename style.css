@@ -123,7 +123,8 @@ body {
 .control-row input.locked-input { background: #EFEBE3; color: var(--text-muted); cursor: not-allowed; }
 .api-key-field { display: flex; flex-direction: column; gap: 4px; flex: 2; min-width: 180px; }
 .api-key-field input[type="text"] { flex: none; min-width: 0; width: 100%; }
-.api-key-hint { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--text-muted); overflow-wrap: anywhere; }
+.api-key-hint { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--text-muted); min-width: 0; }
+.api-key-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .copy-hint-btn {
     flex-shrink: 0; padding: 2px 8px; font-size: 10px; border-radius: 0; border: 1px solid var(--border-soft);
     background: #FBFAF7; color: var(--text-dark); cursor: pointer; font-family: inherit;
