@@ -319,8 +319,8 @@ function setupCampaignSync() {
         if (recordTotalBox) recordTotalBox.innerText = `Total：$HKD ${(data.totalAmount || 0).toLocaleString()}`;
 
         renderLeaderboard("scLeaderboard", mergeLeaderboards(data.leaderboardSc, data.leaderboardPayme));
-        renderSessionFeed("sessionPaymeFeed", data.currentSessionPaymeEvents, false);
-        renderSessionFeed("sessionScFeed", data.currentSessionScEvents, true);
+        renderSessionFeed("sessionPaymeFeed", data.currentSessionPaymeEvents);
+        renderSessionFeed("sessionScFeed", data.currentSessionScEvents);
         updateStatCards(data);
         updateLiveHoursStat();
     }, (error) => notifyFirestoreError("Campaign", error));
@@ -356,7 +356,7 @@ function renderLeaderboard(containerId, list) {
     `).join("");
 }
 
-function renderSessionFeed(containerId, events, editable) {
+function renderSessionFeed(containerId, events) {
     const container = document.getElementById(containerId);
     if (!container) return;
     if (!events || events.length === 0) {
@@ -368,21 +368,14 @@ function renderSessionFeed(containerId, events, editable) {
         const fxHint = (e.originalCurrency && e.originalAmount != null)
             ? ` <span class="feed-fx-hint">(${escapeHtml(e.originalCurrency)} ${e.originalAmount.toLocaleString()})</span>`
             : "";
-        const editBtn = editable ? `<button type="button" class="edit-btn feed-edit-btn" data-event-id="${e.id}">✎</button>` : "";
         return `
         <div class="session-feed-row">
             <span class="feed-name">${escapeHtml(e.name)}</span>
             <span class="feed-amount">$HKD ${(e.amount || 0).toLocaleString()}${fxHint}</span>
             <span class="feed-time">${escapeHtml(e.time || "")}</span>
-            ${editBtn}
         </div>
     `;
     }).join("");
-    if (editable) {
-        container.querySelectorAll(".feed-edit-btn").forEach((btn) => {
-            btn.addEventListener("click", () => editScAmount(btn.dataset.eventId));
-        });
-    }
 }
 
 // ==========================================
@@ -670,56 +663,6 @@ async function addContributionAndRecalc({ isSuperChat, id, name, amount, eventTi
     });
     if (added) await applyAmountSpinCreditRules(amount, name);
     return added;
-}
-
-// 人手修正一筆已記錄嘅 SuperChat 金額（例如 YouTube API 幣值/金額有問題），
-// 會連同排行榜、Total、加鐘規則重新計算一次。
-async function editScAmount(eventId) {
-    const snap = await getDoc(campaignRef);
-    if (!snap.exists()) return;
-    const currentEvent = (snap.data().currentSessionScEvents || []).find((e) => e.id === eventId);
-    if (!currentEvent) return;
-
-    const input = prompt(`修改「${currentEvent.name}」呢筆 SuperChat 金額 (HKD)：`, currentEvent.amount);
-    if (input === null) return;
-    const newAmount = parseFloat(input);
-    if (isNaN(newAmount) || newAmount < 0) { alert("請輸入有效金額"); return; }
-
-    const updated = await runTransaction(db, async (transaction) => {
-        const freshSnap = await transaction.get(campaignRef);
-        if (!freshSnap.exists()) return false;
-        const data = freshSnap.data();
-        const events = data.currentSessionScEvents || [];
-        const event = events.find((e) => e.id === eventId);
-        if (!event) return false;
-
-        const delta = newAmount - (event.amount || 0);
-        if (delta === 0) return false;
-
-        event.amount = newAmount;
-        delete event.originalAmount;
-        delete event.originalCurrency;
-
-        const leaderboard = data.leaderboardSc || [];
-        const existing = leaderboard.find((e) => e.name === event.name);
-        if (existing) existing.amount = Math.max(0, existing.amount + delta);
-
-        const newTotal = Math.max(0, (data.totalAmount || 0) + delta);
-        const newBonusMs = computeBonusMs(newTotal, rulesCache);
-        const deltaMs = newBonusMs - (data.bonusMsGranted || 0);
-
-        const updatePayload = {
-            totalAmount: newTotal,
-            bonusMsGranted: newBonusMs,
-            currentSessionScEvents: events,
-            leaderboardSc: leaderboard
-        };
-        applyBonusTimeDelta(data, deltaMs, updatePayload);
-
-        transaction.update(campaignRef, updatePayload);
-        return true;
-    });
-    if (updated) alert("已更新呢筆 SuperChat 金額");
 }
 
 // ==========================================
@@ -1441,14 +1384,14 @@ async function loadSessions() {
             return;
         }
         container.innerHTML = "";
-        qs.forEach((d) => container.appendChild(buildSessionCard(d.data())));
+        qs.forEach((d) => container.appendChild(buildSessionCard(d.data(), d.id)));
     } catch (e) {
         console.error("載入 Record 失敗", e);
         container.innerHTML = `<div class="empty-hint error">載入記錄出錯：${escapeHtml(e.message)}</div>`;
     }
 }
 
-function buildSessionCard(data) {
+function buildSessionCard(data, sessionId) {
     const card = document.createElement("div");
     card.className = "session-card";
 
@@ -1458,6 +1401,7 @@ function buildSessionCard(data) {
             <td>${escapeHtml(sc.time)}</td>
             <td>$HKD ${(parseFloat(sc.amount) || 0).toLocaleString()}</td>
             <td>${escapeHtml(sc.message || "")}</td>
+            <td><button type="button" class="edit-btn session-table-edit-btn" data-event-id="${sc.id}">✎</button></td>
         </tr>
     `).join("");
 
@@ -1482,8 +1426,8 @@ function buildSessionCard(data) {
         <div class="session-table-block">
             <div class="session-table-title">Super Chat 詳細</div>
             <table class="session-table">
-                <thead><tr><th>用戶名</th><th>時間</th><th>金額</th><th>留言</th></tr></thead>
-                <tbody>${scRows || '<tr><td colspan="4" class="empty-hint">此場無 SC 紀錄</td></tr>'}</tbody>
+                <thead><tr><th>用戶名</th><th>時間</th><th>金額</th><th>留言</th><th></th></tr></thead>
+                <tbody>${scRows || '<tr><td colspan="5" class="empty-hint">此場無 SC 紀錄</td></tr>'}</tbody>
             </table>
         </div>
         <div class="session-table-block">
@@ -1494,7 +1438,70 @@ function buildSessionCard(data) {
             </table>
         </div>
     `;
+    card.querySelectorAll(".session-table-edit-btn").forEach((btn) => {
+        btn.addEventListener("click", () => editArchivedScAmount(sessionId, btn.dataset.eventId));
+    });
     return card;
+}
+
+// 人手修正一場已經 Cut Off 咗嘅直播入面某一筆 SuperChat 金額（例如 YouTube API 幣值/金額有問題）。
+// 會連同嗰場記錄嘅小計、以及全馬拉松累積嘅排行榜、Total、加鐘規則一齊重新計算。
+async function editArchivedScAmount(sessionId, eventId) {
+    const sessionRef = doc(db, "sessions", sessionId);
+    const sessionSnap = await getDoc(sessionRef);
+    if (!sessionSnap.exists()) return;
+    const currentEvent = (sessionSnap.data().scEvents || []).find((e) => e.id === eventId);
+    if (!currentEvent) return;
+
+    const input = prompt(`修改「${currentEvent.name}」呢筆 SuperChat 金額 (HKD)：`, currentEvent.amount);
+    if (input === null) return;
+    const newAmount = parseFloat(input);
+    if (isNaN(newAmount) || newAmount < 0) { alert("請輸入有效金額"); return; }
+
+    const updated = await runTransaction(db, async (transaction) => {
+        const freshSessionSnap = await transaction.get(sessionRef);
+        const freshCampaignSnap = await transaction.get(campaignRef);
+        if (!freshSessionSnap.exists() || !freshCampaignSnap.exists()) return false;
+
+        const sessionData = freshSessionSnap.data();
+        const events = sessionData.scEvents || [];
+        const event = events.find((e) => e.id === eventId);
+        if (!event) return false;
+
+        const delta = newAmount - (event.amount || 0);
+        if (delta === 0) return false;
+
+        event.amount = newAmount;
+        delete event.originalAmount;
+        delete event.originalCurrency;
+
+        const scTotal = events.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+        const sessionTotal = scTotal + (sessionData.paymeTotal || 0);
+
+        const campaignData = freshCampaignSnap.data();
+        const leaderboard = campaignData.leaderboardSc || [];
+        const existing = leaderboard.find((e) => e.name === event.name);
+        if (existing) existing.amount = Math.max(0, existing.amount + delta);
+
+        const newTotal = Math.max(0, (campaignData.totalAmount || 0) + delta);
+        const newBonusMs = computeBonusMs(newTotal, rulesCache);
+        const deltaMs = newBonusMs - (campaignData.bonusMsGranted || 0);
+
+        const campaignUpdatePayload = {
+            totalAmount: newTotal,
+            bonusMsGranted: newBonusMs,
+            leaderboardSc: leaderboard
+        };
+        applyBonusTimeDelta(campaignData, deltaMs, campaignUpdatePayload);
+
+        transaction.update(sessionRef, { scEvents: events, scTotal, sessionTotal });
+        transaction.update(campaignRef, campaignUpdatePayload);
+        return true;
+    });
+    if (updated) {
+        alert("已更新呢筆 SuperChat 金額");
+        await loadSessions();
+    }
 }
 
 // ==========================================
