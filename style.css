@@ -275,6 +275,8 @@ body {
 .session-title { font-size: 15px; font-weight: 600; color: var(--text-dark); }
 .session-link { font-size: 11px; color: var(--navy); text-decoration: none; }
 .session-meta { font-size: 12px; color: var(--text-muted); }
+.session-total-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.session-total-edit-btn { width: 22px; height: 22px; font-size: 10px; }
 .session-table-block { margin-top: 14px; background: transparent; border: none; border-top: 1px solid var(--border-soft); padding: 10px 2px 0; }
 .session-table-title { font-size: 11px; font-weight: 700; color: var(--text-muted); margin-bottom: 6px; }
 .session-table { width: 100%; border-collapse: collapse; font-size: 12px; }
