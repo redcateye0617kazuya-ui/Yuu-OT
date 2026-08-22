@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import {
     getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc, deleteDoc,
-    collection, addDoc, getDocs, query, orderBy, limit
+    collection, addDoc, getDocs, query, orderBy, limit, runTransaction
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 // ==========================================
@@ -626,45 +626,50 @@ async function resetCampaign() {
 // 課金（SuperChat / PayMe）寫入 + 規則引擎重算
 // ==========================================
 async function addContributionAndRecalc({ isSuperChat, id, name, amount, eventTimeMs, message, originalAmount, originalCurrency }) {
-    const snap = await getDoc(campaignRef);
-    if (!snap.exists()) return false;
-    const data = snap.data();
+    // 用 transaction 嚟讀+寫，避免同一時間有第二個來源（例如 Cloudflare Worker 補漏程式）
+    // 都喺度讀緊同一份文件，令大家各自基於舊版本算完之後互相覆蓋，靜靜雞漏咗筆數。
+    const added = await runTransaction(db, async (transaction) => {
+        const snap = await transaction.get(campaignRef);
+        if (!snap.exists()) return false;
+        const data = snap.data();
 
-    const sessionKey = isSuperChat ? "currentSessionScEvents" : "currentSessionPaymeEvents";
-    const sessionEvents = data[sessionKey] || [];
-    if (sessionEvents.some((e) => e.id === id)) return false;
+        const sessionKey = isSuperChat ? "currentSessionScEvents" : "currentSessionPaymeEvents";
+        const sessionEvents = data[sessionKey] || [];
+        if (sessionEvents.some((e) => e.id === id)) return false;
 
-    const sessionStart = (data.currentSession && data.currentSession.sessionStartTime) || eventTimeMs;
-    const time = formatMs(eventTimeMs - sessionStart);
-    const event = { id, name, amount, time, message: message || "" };
-    if (originalCurrency && originalCurrency !== "HKD") {
-        event.originalAmount = originalAmount;
-        event.originalCurrency = originalCurrency;
-    }
-    sessionEvents.push(event);
+        const sessionStart = (data.currentSession && data.currentSession.sessionStartTime) || eventTimeMs;
+        const time = formatMs(eventTimeMs - sessionStart);
+        const event = { id, name, amount, time, message: message || "" };
+        if (originalCurrency && originalCurrency !== "HKD") {
+            event.originalAmount = originalAmount;
+            event.originalCurrency = originalCurrency;
+        }
+        sessionEvents.push(event);
 
-    const lbKey = isSuperChat ? "leaderboardSc" : "leaderboardPayme";
-    const leaderboard = data[lbKey] || [];
-    const existing = leaderboard.find((e) => e.name === name);
-    if (existing) existing.amount += amount;
-    else leaderboard.push({ name, amount });
+        const lbKey = isSuperChat ? "leaderboardSc" : "leaderboardPayme";
+        const leaderboard = data[lbKey] || [];
+        const existing = leaderboard.find((e) => e.name === name);
+        if (existing) existing.amount += amount;
+        else leaderboard.push({ name, amount });
 
-    const newTotal = (data.totalAmount || 0) + amount;
-    const newBonusMs = computeBonusMs(newTotal, rulesCache);
-    const oldBonusMs = data.bonusMsGranted || 0;
-    const deltaMs = newBonusMs - oldBonusMs;
+        const newTotal = (data.totalAmount || 0) + amount;
+        const newBonusMs = computeBonusMs(newTotal, rulesCache);
+        const oldBonusMs = data.bonusMsGranted || 0;
+        const deltaMs = newBonusMs - oldBonusMs;
 
-    const updatePayload = {
-        totalAmount: newTotal,
-        bonusMsGranted: newBonusMs,
-        [sessionKey]: sessionEvents,
-        [lbKey]: leaderboard
-    };
-    applyBonusTimeDelta(data, deltaMs, updatePayload);
+        const updatePayload = {
+            totalAmount: newTotal,
+            bonusMsGranted: newBonusMs,
+            [sessionKey]: sessionEvents,
+            [lbKey]: leaderboard
+        };
+        applyBonusTimeDelta(data, deltaMs, updatePayload);
 
-    await updateDoc(campaignRef, updatePayload);
-    await applyAmountSpinCreditRules(amount, name);
-    return true;
+        transaction.update(campaignRef, updatePayload);
+        return true;
+    });
+    if (added) await applyAmountSpinCreditRules(amount, name);
+    return added;
 }
 
 // 人手修正一筆已記錄嘅 SuperChat 金額（例如 YouTube API 幣值/金額有問題），
@@ -672,92 +677,106 @@ async function addContributionAndRecalc({ isSuperChat, id, name, amount, eventTi
 async function editScAmount(eventId) {
     const snap = await getDoc(campaignRef);
     if (!snap.exists()) return;
-    const data = snap.data();
-    const events = data.currentSessionScEvents || [];
-    const event = events.find((e) => e.id === eventId);
-    if (!event) return;
+    const currentEvent = (snap.data().currentSessionScEvents || []).find((e) => e.id === eventId);
+    if (!currentEvent) return;
 
-    const input = prompt(`修改「${event.name}」呢筆 SuperChat 金額 (HKD)：`, event.amount);
+    const input = prompt(`修改「${currentEvent.name}」呢筆 SuperChat 金額 (HKD)：`, currentEvent.amount);
     if (input === null) return;
     const newAmount = parseFloat(input);
     if (isNaN(newAmount) || newAmount < 0) { alert("請輸入有效金額"); return; }
 
-    const delta = newAmount - (event.amount || 0);
-    if (delta === 0) return;
+    const updated = await runTransaction(db, async (transaction) => {
+        const freshSnap = await transaction.get(campaignRef);
+        if (!freshSnap.exists()) return false;
+        const data = freshSnap.data();
+        const events = data.currentSessionScEvents || [];
+        const event = events.find((e) => e.id === eventId);
+        if (!event) return false;
 
-    event.amount = newAmount;
-    delete event.originalAmount;
-    delete event.originalCurrency;
+        const delta = newAmount - (event.amount || 0);
+        if (delta === 0) return false;
 
-    const leaderboard = data.leaderboardSc || [];
-    const existing = leaderboard.find((e) => e.name === event.name);
-    if (existing) existing.amount = Math.max(0, existing.amount + delta);
+        event.amount = newAmount;
+        delete event.originalAmount;
+        delete event.originalCurrency;
 
-    const newTotal = Math.max(0, (data.totalAmount || 0) + delta);
-    const newBonusMs = computeBonusMs(newTotal, rulesCache);
-    const deltaMs = newBonusMs - (data.bonusMsGranted || 0);
+        const leaderboard = data.leaderboardSc || [];
+        const existing = leaderboard.find((e) => e.name === event.name);
+        if (existing) existing.amount = Math.max(0, existing.amount + delta);
 
-    const updatePayload = {
-        totalAmount: newTotal,
-        bonusMsGranted: newBonusMs,
-        currentSessionScEvents: events,
-        leaderboardSc: leaderboard
-    };
-    applyBonusTimeDelta(data, deltaMs, updatePayload);
+        const newTotal = Math.max(0, (data.totalAmount || 0) + delta);
+        const newBonusMs = computeBonusMs(newTotal, rulesCache);
+        const deltaMs = newBonusMs - (data.bonusMsGranted || 0);
 
-    await updateDoc(campaignRef, updatePayload);
-    alert("已更新呢筆 SuperChat 金額");
+        const updatePayload = {
+            totalAmount: newTotal,
+            bonusMsGranted: newBonusMs,
+            currentSessionScEvents: events,
+            leaderboardSc: leaderboard
+        };
+        applyBonusTimeDelta(data, deltaMs, updatePayload);
+
+        transaction.update(campaignRef, updatePayload);
+        return true;
+    });
+    if (updated) alert("已更新呢筆 SuperChat 金額");
 }
 
 // ==========================================
 // 送會員（Membership Gifting）監聽
 // ==========================================
 async function addMembershipGiftEvent({ id, name, count, eventTimeMs }) {
-    const snap = await getDoc(campaignRef);
-    if (!snap.exists()) return;
-    const data = snap.data();
-    const events = data.currentSessionMembershipEvents || [];
-    if (events.some((e) => e.id === id)) return;
-    const sessionStart = (data.currentSession && data.currentSession.sessionStartTime) || eventTimeMs;
-    const time = formatMs(eventTimeMs - sessionStart);
-    events.push({ id, name, count, time });
-
-    await updateDoc(campaignRef, { currentSessionMembershipEvents: events });
-    await applyMembershipSpinCreditRules(count, name);
+    const added = await runTransaction(db, async (transaction) => {
+        const snap = await transaction.get(campaignRef);
+        if (!snap.exists()) return false;
+        const data = snap.data();
+        const events = data.currentSessionMembershipEvents || [];
+        if (events.some((e) => e.id === id)) return false;
+        const sessionStart = (data.currentSession && data.currentSession.sessionStartTime) || eventTimeMs;
+        const time = formatMs(eventTimeMs - sessionStart);
+        events.push({ id, name, count, time });
+        transaction.update(campaignRef, { currentSessionMembershipEvents: events });
+        return true;
+    });
+    if (added) await applyMembershipSpinCreditRules(count, name);
 }
 
 // ==========================================
 // 會員里程碑留言（Member Milestone Chat）監聽
 // ==========================================
 async function addMilestoneEvent({ id, name, memberMonth, memberLevelName, message, eventTimeMs }) {
-    const snap = await getDoc(campaignRef);
-    if (!snap.exists()) return;
-    const data = snap.data();
-    const events = data.currentSessionMilestoneEvents || [];
-    if (events.some((e) => e.id === id)) return;
-    const sessionStart = (data.currentSession && data.currentSession.sessionStartTime) || eventTimeMs;
-    const time = formatMs(eventTimeMs - sessionStart);
-    events.push({ id, name, memberMonth, memberLevelName: memberLevelName || "", message: message || "", time });
-
-    await updateDoc(campaignRef, { currentSessionMilestoneEvents: events });
-    await applyMilestoneSpinCreditRules(memberMonth, name, memberLevelName);
+    const added = await runTransaction(db, async (transaction) => {
+        const snap = await transaction.get(campaignRef);
+        if (!snap.exists()) return false;
+        const data = snap.data();
+        const events = data.currentSessionMilestoneEvents || [];
+        if (events.some((e) => e.id === id)) return false;
+        const sessionStart = (data.currentSession && data.currentSession.sessionStartTime) || eventTimeMs;
+        const time = formatMs(eventTimeMs - sessionStart);
+        events.push({ id, name, memberMonth, memberLevelName: memberLevelName || "", message: message || "", time });
+        transaction.update(campaignRef, { currentSessionMilestoneEvents: events });
+        return true;
+    });
+    if (added) await applyMilestoneSpinCreditRules(memberMonth, name, memberLevelName);
 }
 
 // ==========================================
 // 新會員加入／升級會員等級（New Sponsor）監聽
 // ==========================================
 async function addNewSponsorEvent({ id, name, memberLevelName, isUpgrade, eventTimeMs }) {
-    const snap = await getDoc(campaignRef);
-    if (!snap.exists()) return;
-    const data = snap.data();
-    const events = data.currentSessionNewSponsorEvents || [];
-    if (events.some((e) => e.id === id)) return;
-    const sessionStart = (data.currentSession && data.currentSession.sessionStartTime) || eventTimeMs;
-    const time = formatMs(eventTimeMs - sessionStart);
-    events.push({ id, name, memberLevelName: memberLevelName || "", isUpgrade: !!isUpgrade, time });
-
-    await updateDoc(campaignRef, { currentSessionNewSponsorEvents: events });
-    await applyNewSponsorSpinCreditRules(name, memberLevelName);
+    const added = await runTransaction(db, async (transaction) => {
+        const snap = await transaction.get(campaignRef);
+        if (!snap.exists()) return false;
+        const data = snap.data();
+        const events = data.currentSessionNewSponsorEvents || [];
+        if (events.some((e) => e.id === id)) return false;
+        const sessionStart = (data.currentSession && data.currentSession.sessionStartTime) || eventTimeMs;
+        const time = formatMs(eventTimeMs - sessionStart);
+        events.push({ id, name, memberLevelName: memberLevelName || "", isUpgrade: !!isUpgrade, time });
+        transaction.update(campaignRef, { currentSessionNewSponsorEvents: events });
+        return true;
+    });
+    if (added) await applyNewSponsorSpinCreditRules(name, memberLevelName);
 }
 
 // 級別名比對：規則度嘅 filter 留空即係唔限級別，有嘢就要 exact match（可以用逗號分隔多個級別）
@@ -770,14 +789,26 @@ function levelMatchesFilter(levelName, filterStr) {
 // ==========================================
 // 抽獎機會：逐個輪盤自訂規則
 // ==========================================
+// 加輪盤機會要 transaction 重新讀一次個 wheel 文件先寫，
+// 因為 wheelsCache 淨係本地快取，可能同 Cloudflare Worker 嗰邊嘅寫入撞期。
+async function appendSpinQueueEntries(wheelId, entries) {
+    if (!entries || entries.length === 0) return;
+    const wheelRef = doc(db, "wheels", wheelId);
+    await runTransaction(db, async (transaction) => {
+        const snap = await transaction.get(wheelRef);
+        if (!snap.exists()) return;
+        const spinQueue = [...(snap.data().spinQueue || []), ...entries];
+        transaction.update(wheelRef, { spinQueue });
+    });
+}
+
 async function applyAmountSpinCreditRules(amount, name) {
     for (const wheel of wheelsCache) {
         if (!wheel.spinRuleAmountEnabled || !(wheel.spinRuleAmount > 0)) continue;
         const creditsToAdd = Math.floor(amount / wheel.spinRuleAmount);
         if (creditsToAdd > 0) {
             const newEntries = Array.from({ length: creditsToAdd }, () => ({ id: genId(), name, source: "課金", time: elapsedSessionTimeStr(Date.now()) }));
-            const spinQueue = [...(wheel.spinQueue || []), ...newEntries];
-            await updateDoc(doc(db, "wheels", wheel.id), { spinQueue });
+            await appendSpinQueueEntries(wheel.id, newEntries);
         }
     }
 }
@@ -788,8 +819,7 @@ async function applyMembershipSpinCreditRules(giftCount, name) {
         const creditsToAdd = Math.floor(giftCount / wheel.spinRuleMembershipCount);
         if (creditsToAdd > 0) {
             const newEntries = Array.from({ length: creditsToAdd }, () => ({ id: genId(), name, source: "送會員", time: elapsedSessionTimeStr(Date.now()) }));
-            const spinQueue = [...(wheel.spinQueue || []), ...newEntries];
-            await updateDoc(doc(db, "wheels", wheel.id), { spinQueue });
+            await appendSpinQueueEntries(wheel.id, newEntries);
         }
     }
 }
@@ -800,8 +830,7 @@ async function applyMilestoneSpinCreditRules(memberMonth, name, memberLevelName)
         if ((memberMonth || 0) < (wheel.spinRuleMilestoneMonths || 0)) continue;
         if (!levelMatchesFilter(memberLevelName, wheel.spinRuleMilestoneLevel)) continue;
         const newEntry = { id: genId(), name, source: "會員里程碑", time: elapsedSessionTimeStr(Date.now()) };
-        const spinQueue = [...(wheel.spinQueue || []), newEntry];
-        await updateDoc(doc(db, "wheels", wheel.id), { spinQueue });
+        await appendSpinQueueEntries(wheel.id, [newEntry]);
     }
 }
 
@@ -810,8 +839,7 @@ async function applyNewSponsorSpinCreditRules(name, memberLevelName) {
         if (!wheel.spinRuleNewSponsorEnabled) continue;
         if (!levelMatchesFilter(memberLevelName, wheel.spinRuleNewSponsorLevel)) continue;
         const newEntry = { id: genId(), name, source: "新／升級會員", time: elapsedSessionTimeStr(Date.now()) };
-        const spinQueue = [...(wheel.spinQueue || []), newEntry];
-        await updateDoc(doc(db, "wheels", wheel.id), { spinQueue });
+        await appendSpinQueueEntries(wheel.id, [newEntry]);
     }
 }
 
@@ -831,10 +859,12 @@ async function checkDailySpinCredits() {
         if (!wheel.spinRuleDailyEnabled || !wheel.spinRuleDailyTime) continue;
         if (wheel.spinRuleDailyLastGrantDate === todayStr) continue;
         if (nowHHMM < wheel.spinRuleDailyTime) continue;
-        const spinQueue = [...(wheel.spinQueue || []), { id: genId(), name: "每日獎勵", source: "每日", time: elapsedSessionTimeStr(Date.now()) }];
-        await updateDoc(doc(db, "wheels", wheel.id), {
-            spinQueue,
-            spinRuleDailyLastGrantDate: todayStr
+        const wheelRef = doc(db, "wheels", wheel.id);
+        await runTransaction(db, async (transaction) => {
+            const snap = await transaction.get(wheelRef);
+            if (!snap.exists() || snap.data().spinRuleDailyLastGrantDate === todayStr) return;
+            const spinQueue = [...(snap.data().spinQueue || []), { id: genId(), name: "每日獎勵", source: "每日", time: elapsedSessionTimeStr(Date.now()) }];
+            transaction.update(wheelRef, { spinQueue, spinRuleDailyLastGrantDate: todayStr });
         });
     }
 }

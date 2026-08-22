@@ -1,8 +1,9 @@
 name: Poll SuperChat fallback
 
+# 已經由 Cloudflare Worker（cloudflare/poll-superchat-worker.js）取代做自動排程；
+# 留低 workflow_dispatch 淨係俾人手觸發，避免同 Cloudflare Worker 同時讀寫
+# campaign 文件引發 race condition（互相覆蓋對方啱啱寫入嘅新記錄）。
 on:
-  schedule:
-    - cron: "*/5 * * * *"
   workflow_dispatch: {}
 
 jobs:
