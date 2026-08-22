@@ -111,12 +111,14 @@ function fromFirestoreFields(fields) {
     return obj;
 }
 
-async function fsGetDoc(token, path) {
+// 連 updateTime 一齊攞返嚟，等寫入嗰陣可以夾住 currentDocument.updateTime 做樂觀鎖，
+// 防止同一時間仲有第二個寫入者（例如瀏覽器分頁自己嗰個 poller）令大家互相覆蓋。
+async function fsGetDocWithMeta(token, path) {
     const res = await fetch(`${FIRESTORE_BASE}/${path}`, { headers: { Authorization: `Bearer ${token}` } });
-    if (res.status === 404) return null;
+    if (res.status === 404) return { data: null, updateTime: null };
     if (!res.ok) throw new Error(`Firestore get ${path} 失敗：${res.status} ${await res.text()}`);
     const json = await res.json();
-    return fromFirestoreFields(json.fields);
+    return { data: fromFirestoreFields(json.fields), updateTime: json.updateTime };
 }
 
 async function fsListDocs(token, collectionPath) {
@@ -126,14 +128,31 @@ async function fsListDocs(token, collectionPath) {
     return (json.documents || []).map((d) => ({ id: d.name.split("/").pop(), ...fromFirestoreFields(d.fields) }));
 }
 
-async function fsPatchDoc(token, path, data) {
+// ifUnchangedUpdateTime 有值嘅話，會夾住 currentDocument.updateTime 一齊送去 Firestore：
+// 如果由攞返個 updateTime 到而家嗰段時間，文件已經俾第二個寫入者改過，Firestore 會拒絕呢次寫入
+// （FAILED_PRECONDITION），等呼叫者可以重新讀過最新資料再試，唔會靜靜雞覆蓋咗人哋啱啱寫入嘅嘢。
+async function fsPatchDoc(token, path, data, ifUnchangedUpdateTime) {
     const fieldPaths = Object.keys(data).map((f) => `updateMask.fieldPaths=${encodeURIComponent(f)}`).join("&");
-    const res = await fetch(`${FIRESTORE_BASE}/${path}?${fieldPaths}`, {
+    let queryStr = fieldPaths;
+    if (ifUnchangedUpdateTime) queryStr += `&currentDocument.updateTime=${encodeURIComponent(ifUnchangedUpdateTime)}`;
+    const res = await fetch(`${FIRESTORE_BASE}/${path}?${queryStr}`, {
         method: "PATCH",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ fields: toFirestoreFields(data) })
     });
-    if (!res.ok) throw new Error(`Firestore patch ${path} 失敗：${res.status} ${await res.text()}`);
+    if (!res.ok) {
+        const bodyText = await res.text();
+        if (ifUnchangedUpdateTime && res.status === 400 && bodyText.includes("FAILED_PRECONDITION")) {
+            const err = new Error(`Firestore patch ${path} 撞期（FAILED_PRECONDITION）`);
+            err.isPreconditionFailed = true;
+            throw err;
+        }
+        throw new Error(`Firestore patch ${path} 失敗：${res.status} ${bodyText}`);
+    }
+}
+
+async function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 // ==========================================
@@ -219,30 +238,52 @@ function genId() {
 // ==========================================
 // 主流程
 // ==========================================
+const MAX_WRITE_ATTEMPTS = 6;
+
+// 讀最新一份 wheel 文件，將 newEntries 加落佢個 spinQueue，用 updateTime 做樂觀鎖，
+// 撞期（同一時間仲有第二個寫入者，例如瀏覽器分頁）就重讀重試。
+async function appendSpinQueueWithRetry(token, wheelId, newEntries) {
+    for (let attempt = 0; attempt < MAX_WRITE_ATTEMPTS; attempt++) {
+        const { data, updateTime } = await fsGetDocWithMeta(token, `wheels/${wheelId}`);
+        if (!data) return;
+        const spinQueue = [...(data.spinQueue || []), ...newEntries];
+        try {
+            await fsPatchDoc(token, `wheels/${wheelId}`, { spinQueue }, updateTime);
+            return;
+        } catch (e) {
+            if (e.isPreconditionFailed && attempt < MAX_WRITE_ATTEMPTS - 1) {
+                await sleep(200 + Math.random() * 300);
+                continue;
+            }
+            throw e;
+        }
+    }
+}
+
 async function pollSuperChat(env) {
     if (!env.FIREBASE_SERVICE_ACCOUNT) throw new Error("缺少 FIREBASE_SERVICE_ACCOUNT 環境變數（Worker Secret）");
     const serviceAccount = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT);
     const token = await getAccessToken(serviceAccount);
 
-    const data = await fsGetDoc(token, "campaign/main");
-    if (!data) { console.log("campaign/main 唔存在，跳過。"); return; }
+    const first = await fsGetDocWithMeta(token, "campaign/main");
+    if (!first.data) { console.log("campaign/main 唔存在，跳過。"); return; }
 
-    if (data.status !== "running" && data.status !== "paused") {
+    if (first.data.status !== "running" && first.data.status !== "paused") {
         console.log("馬拉松未開始或者已完成，跳過。");
         return;
     }
-    const session = data.currentSession;
-    if (!session || !session.active || !session.liveChatId || !data.ytApiKey) {
+    const session = first.data.currentSession;
+    if (!session || !session.active || !session.liveChatId || !first.data.ytApiKey) {
         console.log("而家冇進行緊嘅直播 Session，或者未有 liveChatId／API Key，跳過。");
         return;
     }
 
-    let pollState = data.scPollState;
+    let pollState = first.data.scPollState;
     if (!pollState || pollState.liveChatId !== session.liveChatId) {
         pollState = { liveChatId: session.liveChatId, nextPageToken: null };
     }
 
-    let url = `https://www.googleapis.com/youtube/v3/liveChat/messages?liveChatId=${session.liveChatId}&part=snippet,authorDetails&key=${data.ytApiKey}`;
+    let url = `https://www.googleapis.com/youtube/v3/liveChat/messages?liveChatId=${session.liveChatId}&part=snippet,authorDetails&key=${first.data.ytApiKey}`;
     if (pollState.nextPageToken) url += `&pageToken=${pollState.nextPageToken}`;
 
     const res = await fetch(url);
@@ -261,111 +302,140 @@ async function pollSuperChat(env) {
         return;
     }
 
-    const scEvents = [...(data.currentSessionScEvents || [])];
-    const membershipEvents = [...(data.currentSessionMembershipEvents || [])];
-    const milestoneEvents = [...(data.currentSessionMilestoneEvents || [])];
-    const newSponsorEvents = [...(data.currentSessionNewSponsorEvents || [])];
-    const leaderboardSc = [...(data.leaderboardSc || [])];
-    let totalAmount = data.totalAmount || 0;
-    const sessionStart = session.sessionStartTime || Date.now();
+    const rules = await fsListDocs(token, "rules");
 
-    const amountCreditQueueAdds = [];
-    const membershipCreditQueueAdds = [];
-    const milestoneCreditQueueAdds = [];
-    const newSponsorCreditQueueAdds = [];
+    // 讀→算→（夾住 updateTime）寫，成個循環等寫入撞期（同一時間仲有第二個寫入者，
+    // 例如瀏覽器分頁自己嗰個 poller）嘅話可以重新讀最新資料、以最新資料嚟判斷邊啲訊息
+    // 真係新，先至重試寫入，唔會靜靜雞覆蓋咗人哋啱啱先寫入嘅記錄。
+    let amountCreditQueueAdds = [];
+    let membershipCreditQueueAdds = [];
+    let milestoneCreditQueueAdds = [];
+    let newSponsorCreditQueueAdds = [];
     let anyNew = false;
+    let succeeded = false;
 
-    for (const item of items) {
-        if (item.snippet.type === "superChatEvent") {
-            const scDetails = item.snippet.superChatDetails;
-            if (!scDetails) continue;
-            const id = item.id;
-            if (scEvents.some((e) => e.id === id)) continue;
+    for (let attempt = 0; attempt < MAX_WRITE_ATTEMPTS && !succeeded; attempt++) {
+        const { data, updateTime } = attempt === 0 ? first : await fsGetDocWithMeta(token, "campaign/main");
+        if (!data) return;
 
-            const rawAmount = scDetails.amountMicros ? scDetails.amountMicros / 1000000 : 0;
-            const currencyCode = (scDetails.currency || "HKD").toUpperCase();
-            const amount = await convertToHKD(rawAmount, currencyCode);
-            const name = item.authorDetails.displayName;
-            const eventTimeMs = new Date(item.snippet.publishedAt).getTime();
-            const time = formatMs(eventTimeMs - sessionStart);
+        const sessionStart = (data.currentSession && data.currentSession.sessionStartTime) || session.sessionStartTime || Date.now();
+        const scEvents = [...(data.currentSessionScEvents || [])];
+        const membershipEvents = [...(data.currentSessionMembershipEvents || [])];
+        const milestoneEvents = [...(data.currentSessionMilestoneEvents || [])];
+        const newSponsorEvents = [...(data.currentSessionNewSponsorEvents || [])];
+        const leaderboardSc = [...(data.leaderboardSc || [])];
+        let totalAmount = data.totalAmount || 0;
 
-            const event = { id, name, amount, time, message: scDetails.userComment || "" };
-            if (currencyCode !== "HKD") { event.originalAmount = rawAmount; event.originalCurrency = currencyCode; }
-            scEvents.push(event);
+        amountCreditQueueAdds = [];
+        membershipCreditQueueAdds = [];
+        milestoneCreditQueueAdds = [];
+        newSponsorCreditQueueAdds = [];
+        anyNew = false;
 
-            const existing = leaderboardSc.find((e) => e.name === name);
-            if (existing) existing.amount += amount; else leaderboardSc.push({ name, amount });
+        for (const item of items) {
+            if (item.snippet.type === "superChatEvent") {
+                const scDetails = item.snippet.superChatDetails;
+                if (!scDetails) continue;
+                const id = item.id;
+                if (scEvents.some((e) => e.id === id)) continue;
 
-            totalAmount += amount;
-            amountCreditQueueAdds.push({ name, amount });
-            anyNew = true;
-        } else if (item.snippet.type === "membershipGiftingEvent") {
-            const giftDetails = item.snippet.membershipGiftingDetails;
-            if (!giftDetails) continue;
-            const id = item.id;
-            if (membershipEvents.some((e) => e.id === id)) continue;
+                const rawAmount = scDetails.amountMicros ? scDetails.amountMicros / 1000000 : 0;
+                const currencyCode = (scDetails.currency || "HKD").toUpperCase();
+                const amount = await convertToHKD(rawAmount, currencyCode);
+                const name = item.authorDetails.displayName;
+                const eventTimeMs = new Date(item.snippet.publishedAt).getTime();
+                const time = formatMs(eventTimeMs - sessionStart);
 
-            const name = item.authorDetails.displayName;
-            const count = giftDetails.giftMembershipsCount || 0;
-            const eventTimeMs = new Date(item.snippet.publishedAt).getTime();
-            const time = formatMs(eventTimeMs - sessionStart);
-            membershipEvents.push({ id, name, count, time });
-            membershipCreditQueueAdds.push({ name, count });
-            anyNew = true;
-        } else if (item.snippet.type === "memberMilestoneChatEvent") {
-            const milestoneDetails = item.snippet.memberMilestoneChatDetails;
-            if (!milestoneDetails) continue;
-            const id = item.id;
-            if (milestoneEvents.some((e) => e.id === id)) continue;
+                const event = { id, name, amount, time, message: scDetails.userComment || "" };
+                if (currencyCode !== "HKD") { event.originalAmount = rawAmount; event.originalCurrency = currencyCode; }
+                scEvents.push(event);
 
-            const name = item.authorDetails.displayName;
-            const memberMonth = milestoneDetails.memberMonth || 0;
-            const memberLevelName = milestoneDetails.memberLevelName || "";
-            const eventTimeMs = new Date(item.snippet.publishedAt).getTime();
-            const time = formatMs(eventTimeMs - sessionStart);
-            milestoneEvents.push({ id, name, memberMonth, memberLevelName, message: milestoneDetails.userComment || "", time });
-            milestoneCreditQueueAdds.push({ name, memberMonth, memberLevelName });
-            anyNew = true;
-        } else if (item.snippet.type === "newSponsorEvent") {
-            const newSponsorDetails = item.snippet.newSponsorDetails;
-            if (!newSponsorDetails) continue;
-            const id = item.id;
-            if (newSponsorEvents.some((e) => e.id === id)) continue;
+                const existing = leaderboardSc.find((e) => e.name === name);
+                if (existing) existing.amount += amount; else leaderboardSc.push({ name, amount });
 
-            const name = item.authorDetails.displayName;
-            const memberLevelName = newSponsorDetails.memberLevelName || "";
-            const isUpgrade = !!newSponsorDetails.isUpgrade;
-            const eventTimeMs = new Date(item.snippet.publishedAt).getTime();
-            const time = formatMs(eventTimeMs - sessionStart);
-            newSponsorEvents.push({ id, name, memberLevelName, isUpgrade, time });
-            newSponsorCreditQueueAdds.push({ name, memberLevelName });
-            anyNew = true;
+                totalAmount += amount;
+                amountCreditQueueAdds.push({ name, amount });
+                anyNew = true;
+            } else if (item.snippet.type === "membershipGiftingEvent") {
+                const giftDetails = item.snippet.membershipGiftingDetails;
+                if (!giftDetails) continue;
+                const id = item.id;
+                if (membershipEvents.some((e) => e.id === id)) continue;
+
+                const name = item.authorDetails.displayName;
+                const count = giftDetails.giftMembershipsCount || 0;
+                const eventTimeMs = new Date(item.snippet.publishedAt).getTime();
+                const time = formatMs(eventTimeMs - sessionStart);
+                membershipEvents.push({ id, name, count, time });
+                membershipCreditQueueAdds.push({ name, count });
+                anyNew = true;
+            } else if (item.snippet.type === "memberMilestoneChatEvent") {
+                const milestoneDetails = item.snippet.memberMilestoneChatDetails;
+                if (!milestoneDetails) continue;
+                const id = item.id;
+                if (milestoneEvents.some((e) => e.id === id)) continue;
+
+                const name = item.authorDetails.displayName;
+                const memberMonth = milestoneDetails.memberMonth || 0;
+                const memberLevelName = milestoneDetails.memberLevelName || "";
+                const eventTimeMs = new Date(item.snippet.publishedAt).getTime();
+                const time = formatMs(eventTimeMs - sessionStart);
+                milestoneEvents.push({ id, name, memberMonth, memberLevelName, message: milestoneDetails.userComment || "", time });
+                milestoneCreditQueueAdds.push({ name, memberMonth, memberLevelName });
+                anyNew = true;
+            } else if (item.snippet.type === "newSponsorEvent") {
+                const newSponsorDetails = item.snippet.newSponsorDetails;
+                if (!newSponsorDetails) continue;
+                const id = item.id;
+                if (newSponsorEvents.some((e) => e.id === id)) continue;
+
+                const name = item.authorDetails.displayName;
+                const memberLevelName = newSponsorDetails.memberLevelName || "";
+                const isUpgrade = !!newSponsorDetails.isUpgrade;
+                const eventTimeMs = new Date(item.snippet.publishedAt).getTime();
+                const time = formatMs(eventTimeMs - sessionStart);
+                newSponsorEvents.push({ id, name, memberLevelName, isUpgrade, time });
+                newSponsorCreditQueueAdds.push({ name, memberLevelName });
+                anyNew = true;
+            }
+        }
+
+        if (!anyNew) {
+            await fsPatchDoc(token, "campaign/main", { scPollState: newPollState });
+            console.log("冇新嘅 SuperChat／送會員／會員里程碑／新會員記錄。");
+            return;
+        }
+
+        const newBonusMs = computeBonusMs(totalAmount, rules);
+        const oldBonusMs = data.bonusMsGranted || 0;
+        const deltaMs = newBonusMs - oldBonusMs;
+
+        const updatePayload = {
+            totalAmount,
+            bonusMsGranted: newBonusMs,
+            currentSessionScEvents: scEvents,
+            currentSessionMembershipEvents: membershipEvents,
+            currentSessionMilestoneEvents: milestoneEvents,
+            currentSessionNewSponsorEvents: newSponsorEvents,
+            leaderboardSc,
+            scPollState: newPollState
+        };
+        applyBonusTimeDelta(data, deltaMs, updatePayload);
+
+        try {
+            await fsPatchDoc(token, "campaign/main", updatePayload, updateTime);
+            succeeded = true;
+        } catch (e) {
+            if (e.isPreconditionFailed && attempt < MAX_WRITE_ATTEMPTS - 1) {
+                console.log(`寫入 campaign/main 撞期（第 ${attempt + 1} 次），重新讀取再試...`);
+                await sleep(200 + Math.random() * 300);
+                continue;
+            }
+            throw e;
         }
     }
+    if (!succeeded) throw new Error("寫入 campaign/main 撞期次數過多，放棄。");
 
-    if (!anyNew) {
-        await fsPatchDoc(token, "campaign/main", { scPollState: newPollState });
-        console.log("冇新嘅 SuperChat／送會員／會員里程碑／新會員記錄。");
-        return;
-    }
-
-    const rules = await fsListDocs(token, "rules");
-    const newBonusMs = computeBonusMs(totalAmount, rules);
-    const oldBonusMs = data.bonusMsGranted || 0;
-    const deltaMs = newBonusMs - oldBonusMs;
-
-    const updatePayload = {
-        totalAmount,
-        bonusMsGranted: newBonusMs,
-        currentSessionScEvents: scEvents,
-        currentSessionMembershipEvents: membershipEvents,
-        currentSessionMilestoneEvents: milestoneEvents,
-        currentSessionNewSponsorEvents: newSponsorEvents,
-        leaderboardSc,
-        scPollState: newPollState
-    };
-    applyBonusTimeDelta(data, deltaMs, updatePayload);
-    await fsPatchDoc(token, "campaign/main", updatePayload);
     console.log(`已經寫入 ${amountCreditQueueAdds.length} 個 SuperChat、${membershipCreditQueueAdds.length} 個送會員、${milestoneCreditQueueAdds.length} 個會員里程碑、${newSponsorCreditQueueAdds.length} 個新／升級會員記錄。`);
 
     const wheels = await fsListDocs(token, "wheels");
@@ -374,35 +444,30 @@ async function pollSuperChat(env) {
         if (wheel.spinRuleAmountEnabled && wheel.spinRuleAmount > 0) {
             for (const { name, amount } of amountCreditQueueAdds) {
                 const n = Math.floor(amount / wheel.spinRuleAmount);
-                for (let i = 0; i < n; i++) newEntries.push({ id: genId(), name, source: "課金", time: formatMs(Date.now() - sessionStart) });
+                for (let i = 0; i < n; i++) newEntries.push({ id: genId(), name, source: "課金", time: formatMs(Date.now() - (session.sessionStartTime || Date.now())) });
             }
         }
         if (wheel.spinRuleMembershipEnabled && wheel.spinRuleMembershipCount > 0) {
             for (const { name, count } of membershipCreditQueueAdds) {
                 const n = Math.floor(count / wheel.spinRuleMembershipCount);
-                for (let i = 0; i < n; i++) newEntries.push({ id: genId(), name, source: "送會員", time: formatMs(Date.now() - sessionStart) });
+                for (let i = 0; i < n; i++) newEntries.push({ id: genId(), name, source: "送會員", time: formatMs(Date.now() - (session.sessionStartTime || Date.now())) });
             }
         }
         if (wheel.spinRuleMilestoneEnabled) {
             for (const { name, memberMonth, memberLevelName } of milestoneCreditQueueAdds) {
                 if ((memberMonth || 0) < (wheel.spinRuleMilestoneMonths || 0)) continue;
                 if (!levelMatchesFilter(memberLevelName, wheel.spinRuleMilestoneLevel)) continue;
-                newEntries.push({ id: genId(), name, source: "會員里程碑", time: formatMs(Date.now() - sessionStart) });
+                newEntries.push({ id: genId(), name, source: "會員里程碑", time: formatMs(Date.now() - (session.sessionStartTime || Date.now())) });
             }
         }
         if (wheel.spinRuleNewSponsorEnabled) {
             for (const { name, memberLevelName } of newSponsorCreditQueueAdds) {
                 if (!levelMatchesFilter(memberLevelName, wheel.spinRuleNewSponsorLevel)) continue;
-                newEntries.push({ id: genId(), name, source: "新／升級會員", time: formatMs(Date.now() - sessionStart) });
+                newEntries.push({ id: genId(), name, source: "新／升級會員", time: formatMs(Date.now() - (session.sessionStartTime || Date.now())) });
             }
         }
         if (newEntries.length === 0) continue;
-
-        // 冇用 Firestore transaction（REST API 做 transaction 比較繁複），
-        // 但每分鐘先執行一次、寫入前都會重新讀一次最新資料，撞車機會好細。
-        const freshWheel = await fsGetDoc(token, `wheels/${wheel.id}`);
-        const freshQueue = (freshWheel && freshWheel.spinQueue) || [];
-        await fsPatchDoc(token, `wheels/${wheel.id}`, { spinQueue: [...freshQueue, ...newEntries] });
+        await appendSpinQueueWithRetry(token, wheel.id, newEntries);
     }
 }
 
