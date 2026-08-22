@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import {
     getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc, deleteDoc,
-    collection, addDoc, getDocs, query, orderBy
+    collection, addDoc, getDocs, query, orderBy, limit
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 // ==========================================
@@ -24,6 +24,7 @@ const rulesColRef = collection(db, "rules");
 const sessionsColRef = collection(db, "sessions");
 const wheelsColRef = collection(db, "wheels");
 const presenceColRef = collection(db, "presence");
+const notesColRef = collection(db, "notes");
 
 const TAB_LABELS = { dashboard: "主控台", record: "Record / Report", rule: "Rule Setting", wheel: "輪盤" };
 const PRESENCE_STALE_MS = 45000;
@@ -1467,6 +1468,51 @@ function buildSessionCard(data) {
 }
 
 // ==========================================
+// 留言板（Notes）
+// ==========================================
+function setupNotesSync() {
+    onSnapshot(query(notesColRef, orderBy("createdAt", "desc"), limit(100)), (qs) => {
+        const notes = [];
+        qs.forEach((d) => notes.push({ id: d.id, ...d.data() }));
+        renderNotesFeed(notes);
+    }, (error) => notifyFirestoreError("留言板", error));
+}
+
+function renderNotesFeed(notes) {
+    const container = document.getElementById("notesFeed");
+    if (!container) return;
+    if (!notes || notes.length === 0) {
+        container.innerHTML = '<div class="empty-hint">暫時未有留言</div>';
+        return;
+    }
+    container.innerHTML = notes.map((n) => `
+        <div class="note-row">
+            <div class="note-body">
+                <div class="note-meta">${escapeHtml(n.name)} · ${escapeHtml(new Date(n.createdAt).toLocaleString("zh-HK"))}</div>
+                <div class="note-text">${escapeHtml(n.text)}</div>
+            </div>
+            <button type="button" class="del-btn note-del-btn" data-note-id="${n.id}">✕</button>
+        </div>
+    `).join("");
+    container.querySelectorAll(".note-del-btn").forEach((btn) => {
+        btn.addEventListener("click", () => deleteNote(btn.dataset.noteId));
+    });
+}
+
+async function addNote() {
+    const input = document.getElementById("noteText");
+    const text = input.value.trim();
+    if (!text) return;
+    await addDoc(notesColRef, { name: getMyDisplayName(), text, createdAt: Date.now() });
+    input.value = "";
+}
+
+async function deleteNote(noteId) {
+    if (!confirm("確定要刪除呢條留言？")) return;
+    await deleteDoc(doc(db, "notes", noteId));
+}
+
+// ==========================================
 // 在線名單（Presence）
 // ==========================================
 async function updatePresence(tab) {
@@ -1539,6 +1585,7 @@ window.addEventListener("DOMContentLoaded", () => {
     setInterval(checkDailySpinCredits, 30000);
     setupPresenceSync();
     if (!presenceHeartbeatInterval) presenceHeartbeatInterval = setInterval(() => updatePresence(myCurrentTab), PRESENCE_HEARTBEAT_MS);
+    setupNotesSync();
 
     document.getElementById("startBtn").addEventListener("click", startSession);
     document.getElementById("pauseBtn").addEventListener("click", togglePause);
@@ -1548,6 +1595,7 @@ window.addEventListener("DOMContentLoaded", () => {
     document.getElementById("addPaymeBtn").addEventListener("click", addPayme);
     document.getElementById("addRuleBtn").addEventListener("click", addRule);
     document.getElementById("addWheelBtn").addEventListener("click", addWheel);
+    document.getElementById("addNoteBtn").addEventListener("click", addNote);
     document.getElementById("copyApiKeyBtn").addEventListener("click", async () => {
         try {
             await navigator.clipboard.writeText("AIzaSyCO1i0d_c7EO4jonhTx7ylib2-xAEbLa5M");
