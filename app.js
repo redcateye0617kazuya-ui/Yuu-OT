@@ -1420,7 +1420,11 @@ function buildSessionCard(data, sessionId) {
                 <div class="session-title">${escapeHtml(data.videoTitle || "YouTube 直播節目")}</div>
                 <a class="session-link" href="${escapeHtml(data.videoUrl || "#")}" target="_blank" rel="noopener">觀看連結</a>
                 <div class="session-meta">直播時長：${escapeHtml(data.elapsedStr || "00:00:00")}</div>
-                <div class="session-meta">單場 SuperChat：$HKD ${(data.scTotal || 0).toLocaleString()}　單場 PayMe：$HKD ${(data.paymeTotal || 0).toLocaleString()}</div>
+                <div class="session-meta session-total-row">
+                    <span>單場 SuperChat：$HKD ${(data.scTotal || 0).toLocaleString()}</span>
+                    <button type="button" class="edit-btn session-total-edit-btn">✎</button>
+                    <span>單場 PayMe：$HKD ${(data.paymeTotal || 0).toLocaleString()}</span>
+                </div>
             </div>
         </div>
         <div class="session-table-block">
@@ -1441,6 +1445,8 @@ function buildSessionCard(data, sessionId) {
     card.querySelectorAll(".session-table-edit-btn").forEach((btn) => {
         btn.addEventListener("click", () => editArchivedScAmount(sessionId, btn.dataset.eventId));
     });
+    const totalEditBtn = card.querySelector(".session-total-edit-btn");
+    if (totalEditBtn) totalEditBtn.addEventListener("click", () => editArchivedScTotal(sessionId));
     return card;
 }
 
@@ -1500,6 +1506,51 @@ async function editArchivedScAmount(sessionId, eventId) {
     });
     if (updated) {
         alert("已更新呢筆 SuperChat 金額");
+        await loadSessions();
+    }
+}
+
+// 人手直接修正一場已經 Cut Off 咗嘅直播嘅 SuperChat 總金額（唔使逐筆搵邊條記錄錯）。
+// 唔會改動個別 scEvents 明細，淨係將差額反映去嗰場嘅小計，同全馬拉松累積嘅 Total、加鐘規則。
+async function editArchivedScTotal(sessionId) {
+    const sessionRef = doc(db, "sessions", sessionId);
+    const sessionSnap = await getDoc(sessionRef);
+    if (!sessionSnap.exists()) return;
+    const currentTotal = sessionSnap.data().scTotal || 0;
+
+    const input = prompt("修改呢場直播嘅 SuperChat 總金額 (HKD)：", currentTotal);
+    if (input === null) return;
+    const newTotal = parseFloat(input);
+    if (isNaN(newTotal) || newTotal < 0) { alert("請輸入有效金額"); return; }
+
+    const updated = await runTransaction(db, async (transaction) => {
+        const freshSessionSnap = await transaction.get(sessionRef);
+        const freshCampaignSnap = await transaction.get(campaignRef);
+        if (!freshSessionSnap.exists() || !freshCampaignSnap.exists()) return false;
+
+        const sessionData = freshSessionSnap.data();
+        const delta = newTotal - (sessionData.scTotal || 0);
+        if (delta === 0) return false;
+
+        const sessionTotal = newTotal + (sessionData.paymeTotal || 0);
+
+        const campaignData = freshCampaignSnap.data();
+        const newCampaignTotal = Math.max(0, (campaignData.totalAmount || 0) + delta);
+        const newBonusMs = computeBonusMs(newCampaignTotal, rulesCache);
+        const deltaMs = newBonusMs - (campaignData.bonusMsGranted || 0);
+
+        const campaignUpdatePayload = {
+            totalAmount: newCampaignTotal,
+            bonusMsGranted: newBonusMs
+        };
+        applyBonusTimeDelta(campaignData, deltaMs, campaignUpdatePayload);
+
+        transaction.update(sessionRef, { scTotal: newTotal, sessionTotal });
+        transaction.update(campaignRef, campaignUpdatePayload);
+        return true;
+    });
+    if (updated) {
+        alert("已更新呢場直播嘅 SuperChat 總金額");
         await loadSessions();
     }
 }
