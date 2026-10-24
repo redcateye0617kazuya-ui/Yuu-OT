@@ -1102,19 +1102,6 @@ function buildWheelBlock(wheel) {
             </label>
             <button type="button" class="save-wheel-rules-btn">儲存規則</button>
         </div>
-        ${(wheel.spinRuleAmountEnabled || wheel.spinRuleMembershipEnabled || wheel.spinRuleDailyEnabled || wheel.spinRuleMilestoneEnabled || wheel.spinRuleNewSponsorEnabled) ? `
-        <div class="wheel-spin-queue">
-            <div class="wheel-spin-history-title">抽獎機會排隊 List <span class="panel-subtitle">由舊到新，最上面下一個轉</span></div>
-            <div class="wheel-queue-list">
-                ${queue.length === 0 ? '<div class="empty-hint">暫時未有排緊隊嘅機會</div>' : queue.map((q) => `
-                    <div class="wheel-queue-row" data-queue-id="${q.id}">
-                        <span class="feed-name">${escapeHtml(q.name || "")}</span>
-                        <span class="feed-time">${q.source ? escapeHtml(q.source) : ""} ${escapeHtml(q.time || "")}</span>
-                        <button type="button" class="del-btn del-queue-btn">✕</button>
-                    </div>
-                `).join("")}
-            </div>
-        </div>` : ""}
         <div class="wheel-block-body">
             <div class="wheel-items-col">
                 <div class="wheel-item-add-row">
@@ -1139,6 +1126,19 @@ function buildWheelBlock(wheel) {
                 </div>
                 <button type="button" class="spin-btn">轉！</button>
             </div>
+            ${(wheel.spinRuleAmountEnabled || wheel.spinRuleMembershipEnabled || wheel.spinRuleDailyEnabled || wheel.spinRuleMilestoneEnabled || wheel.spinRuleNewSponsorEnabled) ? `
+            <div class="wheel-queue-col wheel-spin-queue">
+                <div class="wheel-spin-history-title">抽獎機會排隊 List <span class="panel-subtitle">由舊到新，最上面下一個轉</span></div>
+                <div class="wheel-queue-list">
+                    ${queue.length === 0 ? '<div class="empty-hint">暫時未有排緊隊嘅機會</div>' : queue.map((q) => `
+                        <div class="wheel-queue-row" data-queue-id="${q.id}">
+                            <span class="feed-name">${escapeHtml(q.name || "")}</span>
+                            <span class="feed-time">${q.source ? escapeHtml(q.source) : ""} ${escapeHtml(q.time || "")}</span>
+                            <button type="button" class="del-btn del-queue-btn">✕</button>
+                        </div>
+                    `).join("")}
+                </div>
+            </div>` : ""}
         </div>
         <div class="wheel-spin-history">
             <div class="wheel-spin-history-title">輪盤記錄</div>
