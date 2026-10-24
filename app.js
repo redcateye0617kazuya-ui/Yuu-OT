@@ -1212,10 +1212,9 @@ function buildWheelBlock(wheel) {
 }
 
 async function addWheel() {
-    const name = prompt("請輸入新輪盤名稱：", "時間輪");
-    if (name === null) return;
+    const name = `輪盤${wheelsCache.length + 1}`;
     await addDoc(wheelsColRef, {
-        name: name.trim() || "未命名輪盤", items: [], spins: [], createdAt: Date.now(),
+        name, items: [], spins: [], createdAt: Date.now(),
         spinRuleAmountEnabled: false, spinRuleAmount: 0,
         spinRuleMembershipEnabled: false, spinRuleMembershipCount: 0,
         spinRuleDailyEnabled: false, spinRuleDailyTime: "", spinRuleDailyLastGrantDate: null,
