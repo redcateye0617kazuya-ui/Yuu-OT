@@ -731,22 +731,27 @@ function levelMatchesFilter(levelName, filterStr) {
 
 // 以下幾個 get*Entries helper 將「同一種規則可以設定多過一條」統一返做一個 entries 陣列嚟睇；
 // 如果個輪盤文件仲係舊格式（單一 Enabled/Value 欄位），就當佢係得一條嘅 entries，保持向下相容。
+// 每種規則仲有自己嘅 GroupEnabled 開關：剔走就算有設定條件都唔會送機會（但條件本身唔會被刪走）。
 function getWheelAmountEntries(wheel) {
+    if (wheel.spinRuleAmountGroupEnabled === false) return [];
     if (wheel.spinRuleAmountEntries && wheel.spinRuleAmountEntries.length) return wheel.spinRuleAmountEntries;
     if (wheel.spinRuleAmountEnabled && wheel.spinRuleAmount > 0) return [{ id: "legacy", amount: wheel.spinRuleAmount }];
     return [];
 }
 function getWheelMembershipEntries(wheel) {
+    if (wheel.spinRuleMembershipGroupEnabled === false) return [];
     if (wheel.spinRuleMembershipEntries && wheel.spinRuleMembershipEntries.length) return wheel.spinRuleMembershipEntries;
     if (wheel.spinRuleMembershipEnabled && wheel.spinRuleMembershipCount > 0) return [{ id: "legacy", count: wheel.spinRuleMembershipCount }];
     return [];
 }
 function getWheelMilestoneEntries(wheel) {
+    if (wheel.spinRuleMilestoneGroupEnabled === false) return [];
     if (wheel.spinRuleMilestoneEntries && wheel.spinRuleMilestoneEntries.length) return wheel.spinRuleMilestoneEntries;
     if (wheel.spinRuleMilestoneEnabled) return [{ id: "legacy", months: wheel.spinRuleMilestoneMonths || 0, level: wheel.spinRuleMilestoneLevel || "" }];
     return [];
 }
 function getWheelNewSponsorEntries(wheel) {
+    if (wheel.spinRuleNewSponsorGroupEnabled === false) return [];
     if (wheel.spinRuleNewSponsorEntries && wheel.spinRuleNewSponsorEntries.length) return wheel.spinRuleNewSponsorEntries;
     if (wheel.spinRuleNewSponsorEnabled) return [{ id: "legacy", level: wheel.spinRuleNewSponsorLevel || "" }];
     return [];
@@ -1111,6 +1116,16 @@ function buildWheelBlock(wheel) {
     const newSponsorEntries = getWheelNewSponsorEntries(wheel);
 
     const ruleChip = (field, id, label) => `<span class="wheel-rule-chip">${label}<button type="button" class="del-rule-entry-btn" data-field="${field}" data-id="${id}">✕</button></span>`;
+    const groupTitle = (field, label) => `
+        <label class="wheel-rule-group-title wheel-rule-group-toggle">
+            <input type="checkbox" class="wr-group-enabled" data-field="${field}" ${wheel[field] !== false ? "checked" : ""}>
+            ${label}
+        </label>
+    `;
+    const amountGroupEnabled = wheel.spinRuleAmountGroupEnabled !== false;
+    const membershipGroupEnabled = wheel.spinRuleMembershipGroupEnabled !== false;
+    const milestoneGroupEnabled = wheel.spinRuleMilestoneGroupEnabled !== false;
+    const newSponsorGroupEnabled = wheel.spinRuleNewSponsorGroupEnabled !== false;
     const rulesCollapsed = localStorage.getItem(`wheelRulesCollapsed_${wheel.id}`) === "1";
     const isListMode = wheel.mode === "list";
 
@@ -1133,8 +1148,8 @@ function buildWheelBlock(wheel) {
                 <button type="button" class="wheel-rules-toggle-btn">${rulesCollapsed ? "展開 ▸" : "收起 ▾"}</button>
             </div>
             <div class="wheel-credit-rules" style="display:${rulesCollapsed ? "none" : ""};">
-                <div class="wheel-rule-group">
-                    <div class="wheel-rule-group-title">課金金額門檻</div>
+                <div class="wheel-rule-group${amountGroupEnabled ? "" : " rule-group-disabled"}">
+                    ${groupTitle("spinRuleAmountGroupEnabled", "課金金額門檻")}
                     <div class="wheel-rule-chip-list">
                         ${amountEntries.map((e) => ruleChip("spinRuleAmountEntries", e.id, `每 $${e.amount} 送一次`)).join("") || '<span class="no-effect-tag">未設定</span>'}
                     </div>
@@ -1143,8 +1158,8 @@ function buildWheelBlock(wheel) {
                         <button type="button" class="wr-amount-add-btn">加條件</button>
                     </div>
                 </div>
-                <div class="wheel-rule-group">
-                    <div class="wheel-rule-group-title">送會員個數門檻</div>
+                <div class="wheel-rule-group${membershipGroupEnabled ? "" : " rule-group-disabled"}">
+                    ${groupTitle("spinRuleMembershipGroupEnabled", "送會員個數門檻")}
                     <div class="wheel-rule-chip-list">
                         ${membershipEntries.map((e) => ruleChip("spinRuleMembershipEntries", e.id, `單次送${e.count}個送一次`)).join("") || '<span class="no-effect-tag">未設定</span>'}
                     </div>
@@ -1161,8 +1176,8 @@ function buildWheelBlock(wheel) {
                         送一次機會
                     </label>
                 </div>
-                <div class="wheel-rule-group">
-                    <div class="wheel-rule-group-title">會員里程碑留言</div>
+                <div class="wheel-rule-group${milestoneGroupEnabled ? "" : " rule-group-disabled"}">
+                    ${groupTitle("spinRuleMilestoneGroupEnabled", "會員里程碑留言")}
                     <div class="wheel-rule-chip-list">
                         ${milestoneEntries.map((e) => ruleChip("spinRuleMilestoneEntries", e.id, `${e.months}個月或以上${e.level ? `，級別：${escapeHtml(e.level)}` : "（不限級別）"}`)).join("") || '<span class="no-effect-tag">未設定</span>'}
                     </div>
@@ -1172,8 +1187,8 @@ function buildWheelBlock(wheel) {
                         <button type="button" class="wr-milestone-add-btn">加條件</button>
                     </div>
                 </div>
-                <div class="wheel-rule-group">
-                    <div class="wheel-rule-group-title">新會員加入／升級會員等級</div>
+                <div class="wheel-rule-group${newSponsorGroupEnabled ? "" : " rule-group-disabled"}">
+                    ${groupTitle("spinRuleNewSponsorGroupEnabled", "新會員加入／升級會員等級")}
                     <div class="wheel-rule-chip-list">
                         ${newSponsorEntries.map((e) => ruleChip("spinRuleNewSponsorEntries", e.id, e.level ? `級別：${escapeHtml(e.level)}` : "（不限級別）")).join("") || '<span class="no-effect-tag">未設定</span>'}
                     </div>
@@ -1275,6 +1290,9 @@ function buildWheelBlock(wheel) {
     block.querySelectorAll(".del-rule-entry-btn").forEach((btn) => {
         btn.addEventListener("click", () => deleteWheelRuleEntry(wheel.id, btn.dataset.field, btn.dataset.id));
     });
+    block.querySelectorAll(".wr-group-enabled").forEach((cb) => {
+        cb.addEventListener("change", () => toggleWheelRuleGroup(wheel.id, cb.dataset.field, cb.checked));
+    });
 
     const rulesToggleBtn = block.querySelector(".wheel-rules-toggle-btn");
     const rulesContent = block.querySelector(".wheel-credit-rules");
@@ -1329,8 +1347,10 @@ async function addWheel() {
     await addDoc(wheelsColRef, {
         name, items: [], spins: [], createdAt: Date.now(), enabled: true, mode: "wheel",
         spinRuleAmountEntries: [], spinRuleMembershipEntries: [],
+        spinRuleAmountGroupEnabled: true, spinRuleMembershipGroupEnabled: true,
         spinRuleDailyEnabled: false, spinRuleDailyTime: "", spinRuleDailyLastGrantDate: null,
         spinRuleMilestoneEntries: [], spinRuleNewSponsorEntries: [],
+        spinRuleMilestoneGroupEnabled: true, spinRuleNewSponsorGroupEnabled: true,
         spinQueue: []
     });
 }
@@ -1345,6 +1365,11 @@ async function setWheelMode(wheelId, mode) {
 
 async function toggleWheelEnabled(wheelId, enabled) {
     await updateDoc(doc(db, "wheels", wheelId), { enabled });
+}
+
+// 關咗某一種規則就算有設定條件都唔會送機會，但條件本身唔會被刪走，可以隨時剔返轉嚟。
+async function toggleWheelRuleGroup(wheelId, field, enabled) {
+    await updateDoc(doc(db, "wheels", wheelId), { [field]: enabled });
 }
 
 async function saveWheelDailyRule(wheelId, enabled, time) {

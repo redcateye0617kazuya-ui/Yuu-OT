@@ -86,22 +86,27 @@ function levelMatchesFilter(levelName, filterStr) {
 }
 
 // 同一種規則而家可以設定多過一條（entries 陣列）；舊格式嘅單一 Enabled/Value 欄位當做得一條嚟睇，保持向下相容。
+// 每種規則仲有自己嘅 GroupEnabled 開關：剔走就算有設定條件都唔會送機會。
 function getWheelAmountEntries(wheel) {
+    if (wheel.spinRuleAmountGroupEnabled === false) return [];
     if (wheel.spinRuleAmountEntries && wheel.spinRuleAmountEntries.length) return wheel.spinRuleAmountEntries;
     if (wheel.spinRuleAmountEnabled && wheel.spinRuleAmount > 0) return [{ id: "legacy", amount: wheel.spinRuleAmount }];
     return [];
 }
 function getWheelMembershipEntries(wheel) {
+    if (wheel.spinRuleMembershipGroupEnabled === false) return [];
     if (wheel.spinRuleMembershipEntries && wheel.spinRuleMembershipEntries.length) return wheel.spinRuleMembershipEntries;
     if (wheel.spinRuleMembershipEnabled && wheel.spinRuleMembershipCount > 0) return [{ id: "legacy", count: wheel.spinRuleMembershipCount }];
     return [];
 }
 function getWheelMilestoneEntries(wheel) {
+    if (wheel.spinRuleMilestoneGroupEnabled === false) return [];
     if (wheel.spinRuleMilestoneEntries && wheel.spinRuleMilestoneEntries.length) return wheel.spinRuleMilestoneEntries;
     if (wheel.spinRuleMilestoneEnabled) return [{ id: "legacy", months: wheel.spinRuleMilestoneMonths || 0, level: wheel.spinRuleMilestoneLevel || "" }];
     return [];
 }
 function getWheelNewSponsorEntries(wheel) {
+    if (wheel.spinRuleNewSponsorGroupEnabled === false) return [];
     if (wheel.spinRuleNewSponsorEntries && wheel.spinRuleNewSponsorEntries.length) return wheel.spinRuleNewSponsorEntries;
     if (wheel.spinRuleNewSponsorEnabled) return [{ id: "legacy", level: wheel.spinRuleNewSponsorLevel || "" }];
     return [];

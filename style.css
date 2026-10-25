@@ -259,9 +259,15 @@ body {
     padding: 4px 10px; border-radius: 0; border: 1px solid var(--border-soft); background: #FBFAF7;
     color: var(--text-dark); font-size: 11px; font-weight: 700; cursor: pointer; font-family: inherit;
 }
-.wheel-credit-rules { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 16px; padding-top: 14px; }
-.wheel-rule-group { flex: 1; min-width: 220px; max-width: 320px; }
+.wheel-credit-rules {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 18px 24px; padding-top: 14px;
+}
+.wheel-rule-group { min-width: 0; padding-right: 16px; border-right: 1px solid var(--border-soft); }
+.wheel-rule-group:last-child { border-right: none; padding-right: 0; }
+.wheel-rule-group.rule-group-disabled { opacity: 0.45; }
 .wheel-rule-group-title { font-size: 11px; font-weight: 700; color: var(--text-muted); margin-bottom: 6px; }
+.wheel-rule-group-toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.wheel-rule-group-toggle input[type="checkbox"] { flex-shrink: 0; cursor: pointer; }
 .wheel-rule-chip-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; min-height: 20px; }
 .wheel-rule-chip {
     display: inline-flex; align-items: center; gap: 5px; background: var(--navy-soft); color: var(--navy);
@@ -273,7 +279,7 @@ body {
 }
 .wheel-rule-add-row { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
 .wheel-rule-add-row input { padding: 5px 7px; border-radius: 0; border: 1px solid var(--border-soft); background: #FBFAF7; font-size: 11px; min-width: 0; flex: 1; }
-.wheel-rule-add-row button { padding: 5px 10px; border-radius: 0; border: none; background: var(--navy); color: #FFFFFF; font-weight: 700; cursor: pointer; font-size: 11px; font-family: inherit; }
+.wheel-rule-add-row button { padding: 5px 10px; border-radius: 0; border: none; background: var(--teal); color: #FFFFFF; font-weight: 700; cursor: pointer; font-size: 11px; font-family: inherit; }
 .wheel-block-body { display: flex; gap: 20px; flex-wrap: wrap; }
 .wheel-items-col { flex: 1; min-width: 170px; max-width: 260px; }
 .wheel-item-add-row { display: flex; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; align-items: center; }
