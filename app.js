@@ -1112,10 +1112,15 @@ function buildWheelBlock(wheel) {
 
     const ruleChip = (field, id, label) => `<span class="wheel-rule-chip">${label}<button type="button" class="del-rule-entry-btn" data-field="${field}" data-id="${id}">✕</button></span>`;
     const rulesCollapsed = localStorage.getItem(`wheelRulesCollapsed_${wheel.id}`) === "1";
+    const isListMode = wheel.mode === "list";
 
     block.innerHTML = `
         <div class="wheel-block-header">
             <input type="text" class="wheel-name-input" value="${escapeHtml(wheel.name || "")}">
+            <select class="wheel-mode-select">
+                <option value="wheel" ${!isListMode ? "selected" : ""}>🎡 輪盤</option>
+                <option value="list" ${isListMode ? "selected" : ""}>📋 名單（實體輪盤用）</option>
+            </select>
             <label class="wheel-enabled-toggle toggle-switch">
                 <input type="checkbox" class="wheel-enabled-cb" ${wheel.enabled !== false ? "checked" : ""}>
                 <span class="toggle-slider"></span>
@@ -1180,6 +1185,7 @@ function buildWheelBlock(wheel) {
             </div>
         </div>
         <div class="wheel-block-body">
+            ${!isListMode ? `
             <div class="wheel-items-col">
                 <div class="wheel-item-add-row">
                     <input type="text" placeholder="項目名稱" class="wheel-item-label">
@@ -1202,7 +1208,7 @@ function buildWheelBlock(wheel) {
                     <div class="wheel-pointer"></div>
                 </div>
                 <button type="button" class="spin-btn">轉！</button>
-            </div>
+            </div>` : ""}
             ${(amountEntries.length || membershipEntries.length || wheel.spinRuleDailyEnabled || milestoneEntries.length || newSponsorEntries.length) ? `
             <div class="wheel-queue-col wheel-spin-queue">
                 <div class="wheel-spin-history-title">抽獎機會排隊 List <span class="panel-subtitle">由舊到新，最上面下一個轉</span></div>
@@ -1217,6 +1223,7 @@ function buildWheelBlock(wheel) {
                 </div>
             </div>` : ""}
         </div>
+        ${!isListMode ? `
         <div class="wheel-spin-history">
             <div class="wheel-spin-history-title">輪盤記錄</div>
             <div class="wheel-spin-list">
@@ -1227,13 +1234,15 @@ function buildWheelBlock(wheel) {
                     </div>
                 `).join("")}
             </div>
-        </div>
+        </div>` : ""}
     `;
 
     block.querySelector(".wheel-name-input").addEventListener("change", (e) => renameWheel(wheel.id, e.target.value));
+    block.querySelector(".wheel-mode-select").addEventListener("change", (e) => setWheelMode(wheel.id, e.target.value));
     block.querySelector(".wheel-enabled-cb").addEventListener("change", (e) => toggleWheelEnabled(wheel.id, e.target.checked));
     block.querySelector(".del-wheel-btn").addEventListener("click", () => deleteWheel(wheel.id));
-    block.querySelector(".add-wheel-item-btn").addEventListener("click", () => addWheelItem(wheel.id, block));
+    const addWheelItemBtn = block.querySelector(".add-wheel-item-btn");
+    if (addWheelItemBtn) addWheelItemBtn.addEventListener("click", () => addWheelItem(wheel.id, block));
 
     block.querySelector(".wr-amount-add-btn").addEventListener("click", () => {
         const input = block.querySelector(".wr-amount-new");
@@ -1286,9 +1295,11 @@ function buildWheelBlock(wheel) {
 
     const affectsCheckbox = block.querySelector(".wheel-item-affects-timer");
     const hoursInputEl = block.querySelector(".wheel-item-hours");
-    affectsCheckbox.addEventListener("change", () => {
-        hoursInputEl.style.display = affectsCheckbox.checked ? "" : "none";
-    });
+    if (affectsCheckbox && hoursInputEl) {
+        affectsCheckbox.addEventListener("change", () => {
+            hoursInputEl.style.display = affectsCheckbox.checked ? "" : "none";
+        });
+    }
     block.querySelectorAll(".del-item-btn").forEach((btn) => {
         btn.addEventListener("click", () => deleteWheelItem(wheel.id, btn.closest(".wheel-item-row").dataset.itemId));
     });
@@ -1298,7 +1309,8 @@ function buildWheelBlock(wheel) {
     block.querySelectorAll(".del-queue-btn").forEach((btn) => {
         btn.addEventListener("click", () => deleteQueueEntry(wheel.id, btn.closest(".wheel-queue-row").dataset.queueId));
     });
-    block.querySelector(".spin-btn").addEventListener("click", (e) => spinWheel(wheel.id, e.target));
+    const spinBtn = block.querySelector(".spin-btn");
+    if (spinBtn) spinBtn.addEventListener("click", (e) => spinWheel(wheel.id, e.target));
 
     setTimeout(() => {
         const canvasEl = document.getElementById(`wheelCanvas_${wheel.id}`);
@@ -1315,7 +1327,7 @@ function buildWheelBlock(wheel) {
 async function addWheel() {
     const name = `輪盤${wheelsCache.length + 1}`;
     await addDoc(wheelsColRef, {
-        name, items: [], spins: [], createdAt: Date.now(), enabled: true,
+        name, items: [], spins: [], createdAt: Date.now(), enabled: true, mode: "wheel",
         spinRuleAmountEntries: [], spinRuleMembershipEntries: [],
         spinRuleDailyEnabled: false, spinRuleDailyTime: "", spinRuleDailyLastGrantDate: null,
         spinRuleMilestoneEntries: [], spinRuleNewSponsorEntries: [],
@@ -1325,6 +1337,10 @@ async function addWheel() {
 
 async function renameWheel(wheelId, newName) {
     await updateDoc(doc(db, "wheels", wheelId), { name: newName.trim() || "未命名輪盤" });
+}
+
+async function setWheelMode(wheelId, mode) {
+    await updateDoc(doc(db, "wheels", wheelId), { mode });
 }
 
 async function toggleWheelEnabled(wheelId, enabled) {
