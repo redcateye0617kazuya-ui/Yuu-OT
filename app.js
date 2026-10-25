@@ -1133,8 +1133,8 @@ function buildWheelBlock(wheel) {
         <div class="wheel-block-header">
             <input type="text" class="wheel-name-input" value="${escapeHtml(wheel.name || "")}">
             <select class="wheel-mode-select">
-                <option value="wheel" ${!isListMode ? "selected" : ""}>🎡 輪盤</option>
-                <option value="list" ${isListMode ? "selected" : ""}>📋 名單（實體輪盤用）</option>
+                <option value="wheel" ${!isListMode ? "selected" : ""}>輪盤</option>
+                <option value="list" ${isListMode ? "selected" : ""}>名單（實體輪盤用）</option>
             </select>
             <label class="wheel-enabled-toggle toggle-switch">
                 <input type="checkbox" class="wheel-enabled-cb" ${wheel.enabled !== false ? "checked" : ""}>
