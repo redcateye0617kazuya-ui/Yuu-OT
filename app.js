@@ -1111,6 +1111,7 @@ function buildWheelBlock(wheel) {
     const newSponsorEntries = getWheelNewSponsorEntries(wheel);
 
     const ruleChip = (field, id, label) => `<span class="wheel-rule-chip">${label}<button type="button" class="del-rule-entry-btn" data-field="${field}" data-id="${id}">✕</button></span>`;
+    const rulesCollapsed = localStorage.getItem(`wheelRulesCollapsed_${wheel.id}`) === "1";
 
     block.innerHTML = `
         <div class="wheel-block-header">
@@ -1121,8 +1122,12 @@ function buildWheelBlock(wheel) {
             </label>
             <button type="button" class="del-wheel-btn">刪除輪盤</button>
         </div>
-        <div class="wheel-block-body">
-            <div class="wheel-rule-col wheel-credit-rules">
+        <div class="wheel-rules-section">
+            <div class="wheel-rules-header">
+                <span class="wheel-rules-title">抽獎機會規則</span>
+                <button type="button" class="wheel-rules-toggle-btn">${rulesCollapsed ? "展開 ▸" : "收起 ▾"}</button>
+            </div>
+            <div class="wheel-credit-rules" style="display:${rulesCollapsed ? "none" : ""};">
                 <div class="wheel-rule-group">
                     <div class="wheel-rule-group-title">課金金額門檻</div>
                     <div class="wheel-rule-chip-list">
@@ -1173,6 +1178,8 @@ function buildWheelBlock(wheel) {
                     </div>
                 </div>
             </div>
+        </div>
+        <div class="wheel-block-body">
             <div class="wheel-items-col">
                 <div class="wheel-item-add-row">
                     <input type="text" placeholder="項目名稱" class="wheel-item-label">
@@ -1258,6 +1265,15 @@ function buildWheelBlock(wheel) {
     });
     block.querySelectorAll(".del-rule-entry-btn").forEach((btn) => {
         btn.addEventListener("click", () => deleteWheelRuleEntry(wheel.id, btn.dataset.field, btn.dataset.id));
+    });
+
+    const rulesToggleBtn = block.querySelector(".wheel-rules-toggle-btn");
+    const rulesContent = block.querySelector(".wheel-credit-rules");
+    rulesToggleBtn.addEventListener("click", () => {
+        const collapsing = rulesContent.style.display !== "none";
+        rulesContent.style.display = collapsing ? "none" : "";
+        rulesToggleBtn.textContent = collapsing ? "展開 ▸" : "收起 ▾";
+        localStorage.setItem(`wheelRulesCollapsed_${wheel.id}`, collapsing ? "1" : "0");
     });
 
     const dailyEnabledCb = block.querySelector(".wr-daily-enabled");
