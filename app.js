@@ -1034,7 +1034,11 @@ function setupWheelsSync() {
     onSnapshot(wheelsColRef, (qs) => {
         wheelsCache = [];
         qs.forEach((d) => wheelsCache.push({ id: d.id, ...d.data() }));
-        wheelsCache.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        wheelsCache.sort((a, b) => {
+            const orderA = a.order != null ? a.order : -(a.createdAt || 0);
+            const orderB = b.order != null ? b.order : -(b.createdAt || 0);
+            return orderA - orderB;
+        });
         renderWheels();
         updatePendingSpinsStat();
     }, (error) => notifyFirestoreError("輪盤", error));
@@ -1104,9 +1108,75 @@ function renderWheels() {
     wheelsCache.forEach((wheel) => container.appendChild(buildWheelBlock(wheel)));
 }
 
+// 拖曳排序：郁動嗰下淨係畀張卡跟住隻手指／滑鼠移動，再顯示放落邊度嘅指示線；
+// 真正嘅 DOM 排序同寫入 Firestore 淨係喺放手嗰刻做一次，避免中途反覆搬位引致畫面跳動。
+let wheelDragState = null;
+
+function setupWheelDragHandle(handle, block) {
+    if (!handle) return;
+    handle.addEventListener("pointerdown", (e) => {
+        if (e.button !== undefined && e.button !== 0) return;
+        e.preventDefault();
+        wheelDragState = { block, startY: e.clientY, dropTarget: null };
+        block.classList.add("wheel-dragging");
+        try { handle.setPointerCapture(e.pointerId); } catch (err) { /* 冇得 capture 都唔緊要，照用 window listener */ }
+        window.addEventListener("pointermove", onWheelDragMove);
+        window.addEventListener("pointerup", onWheelDragEnd);
+    });
+}
+
+function onWheelDragMove(e) {
+    if (!wheelDragState) return;
+    const deltaY = e.clientY - wheelDragState.startY;
+    wheelDragState.block.style.transform = `translateY(${deltaY}px)`;
+
+    const container = document.getElementById("wheelListContainer");
+    if (!container) return;
+    const others = Array.from(container.querySelectorAll(".wheel-block")).filter((el) => el !== wheelDragState.block);
+    container.querySelectorAll(".wheel-drop-before, .wheel-drop-after").forEach((el) => {
+        el.classList.remove("wheel-drop-before", "wheel-drop-after");
+    });
+
+    let chosen = null;
+    for (const el of others) {
+        const rect = el.getBoundingClientRect();
+        if (e.clientY < rect.top + rect.height / 2) { chosen = { el, before: true }; break; }
+    }
+    if (!chosen && others.length > 0) chosen = { el: others[others.length - 1], before: false };
+    wheelDragState.dropTarget = chosen;
+    if (chosen) chosen.el.classList.add(chosen.before ? "wheel-drop-before" : "wheel-drop-after");
+}
+
+async function onWheelDragEnd() {
+    if (!wheelDragState) return;
+    const { block, dropTarget } = wheelDragState;
+    window.removeEventListener("pointermove", onWheelDragMove);
+    window.removeEventListener("pointerup", onWheelDragEnd);
+    block.classList.remove("wheel-dragging");
+    block.style.transform = "";
+
+    const container = document.getElementById("wheelListContainer");
+    if (container) {
+        container.querySelectorAll(".wheel-drop-before, .wheel-drop-after").forEach((el) => {
+            el.classList.remove("wheel-drop-before", "wheel-drop-after");
+        });
+        if (dropTarget) {
+            if (dropTarget.before) container.insertBefore(block, dropTarget.el);
+            else container.insertBefore(block, dropTarget.el.nextSibling);
+        }
+    }
+    wheelDragState = null;
+
+    if (container) {
+        const ids = Array.from(container.querySelectorAll(".wheel-block")).map((el) => el.dataset.wheelId);
+        await Promise.all(ids.map((id, i) => updateDoc(doc(db, "wheels", id), { order: i })));
+    }
+}
+
 function buildWheelBlock(wheel) {
     const block = document.createElement("div");
     block.className = wheel.enabled !== false ? "wheel-block" : "wheel-block wheel-disabled";
+    block.dataset.wheelId = wheel.id;
     const items = wheel.items || [];
     const spins = wheel.spins || [];
     const queue = wheel.spinQueue || [];
@@ -1131,6 +1201,7 @@ function buildWheelBlock(wheel) {
 
     block.innerHTML = `
         <div class="wheel-block-header">
+            <span class="wheel-drag-handle" title="拖曳排序">⠿</span>
             <input type="text" class="wheel-name-input" value="${escapeHtml(wheel.name || "")}">
             <select class="wheel-mode-select">
                 <option value="wheel" ${!isListMode ? "selected" : ""}>輪盤</option>
@@ -1253,6 +1324,7 @@ function buildWheelBlock(wheel) {
     `;
 
     block.querySelector(".wheel-name-input").addEventListener("change", (e) => renameWheel(wheel.id, e.target.value));
+    setupWheelDragHandle(block.querySelector(".wheel-drag-handle"), block);
     block.querySelector(".wheel-mode-select").addEventListener("change", (e) => setWheelMode(wheel.id, e.target.value));
     block.querySelector(".wheel-enabled-cb").addEventListener("change", (e) => toggleWheelEnabled(wheel.id, e.target.checked));
     block.querySelector(".del-wheel-btn").addEventListener("click", () => deleteWheel(wheel.id));
@@ -1344,8 +1416,9 @@ function buildWheelBlock(wheel) {
 
 async function addWheel() {
     const name = `輪盤${wheelsCache.length + 1}`;
+    const order = wheelsCache.reduce((max, w) => Math.max(max, w.order != null ? w.order : -1), -1) + 1;
     await addDoc(wheelsColRef, {
-        name, items: [], spins: [], createdAt: Date.now(), enabled: true, mode: "wheel",
+        name, items: [], spins: [], createdAt: Date.now(), enabled: true, mode: "wheel", order,
         spinRuleAmountEntries: [], spinRuleMembershipEntries: [],
         spinRuleAmountGroupEnabled: true, spinRuleMembershipGroupEnabled: true,
         spinRuleDailyEnabled: false, spinRuleDailyTime: "", spinRuleDailyLastGrantDate: null,
