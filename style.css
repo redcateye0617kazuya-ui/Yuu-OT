@@ -228,11 +228,26 @@ body {
 .wheel-toolbar { margin-bottom: 16px; }
 .wheel-toolbar button { padding: 10px 18px; border-radius: 0; border: none; background: var(--teal); color: #FFFFFF; font-weight: 700; cursor: pointer; font-family: inherit; }
 .wheel-block { background: var(--panel-bg); border-radius: 0; padding: 22px; border: none; box-shadow: var(--shadow-soft); margin-bottom: 20px; }
+.wheel-block.wheel-disabled { opacity: 0.55; }
 .wheel-block-header { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
 .wheel-name-input { flex: 1; font-size: 16px; font-weight: 600; padding: 8px 12px; border-radius: 0; border: 1px solid var(--border-soft); background: #FBFAF7; color: var(--text-dark); }
+.wheel-enabled-toggle { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-muted); white-space: nowrap; flex-shrink: 0; }
 .del-wheel-btn { padding: 8px 14px; border-radius: 0; border: none; background: var(--danger-soft); color: var(--danger); font-weight: 700; cursor: pointer; font-size: 12px; }
-.wheel-credit-rules { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding-bottom: 14px; margin-bottom: 14px; border-bottom: 1px solid var(--border-soft); }
-.wheel-credit-rules .save-wheel-rules-btn { padding: 6px 14px; border-radius: 0; border: none; background: var(--navy); color: #FFFFFF; font-weight: 700; cursor: pointer; font-size: 12px; font-family: inherit; }
+.wheel-credit-rules { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 16px; padding-bottom: 14px; margin-bottom: 14px; border-bottom: 1px solid var(--border-soft); }
+.wheel-rule-group { flex: 1; min-width: 220px; }
+.wheel-rule-group-title { font-size: 11px; font-weight: 700; color: var(--text-muted); margin-bottom: 6px; }
+.wheel-rule-chip-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; min-height: 20px; }
+.wheel-rule-chip {
+    display: inline-flex; align-items: center; gap: 5px; background: var(--navy-soft); color: var(--navy);
+    font-size: 11px; padding: 4px 4px 4px 8px; border-radius: 0;
+}
+.wheel-rule-chip .del-rule-entry-btn {
+    background: transparent; border: none; color: var(--navy); cursor: pointer; font-size: 11px;
+    font-family: inherit; padding: 0 4px; line-height: 1;
+}
+.wheel-rule-add-row { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+.wheel-rule-add-row input { padding: 5px 7px; border-radius: 0; border: 1px solid var(--border-soft); background: #FBFAF7; font-size: 11px; min-width: 0; flex: 1; }
+.wheel-rule-add-row button { padding: 5px 10px; border-radius: 0; border: none; background: var(--navy); color: #FFFFFF; font-weight: 700; cursor: pointer; font-size: 11px; font-family: inherit; }
 .wheel-block-body { display: flex; gap: 20px; flex-wrap: wrap; }
 .wheel-items-col { flex: 1; min-width: 170px; max-width: 260px; }
 .wheel-item-add-row { display: flex; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; align-items: center; }

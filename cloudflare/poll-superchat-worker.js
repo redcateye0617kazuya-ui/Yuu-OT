@@ -231,6 +231,31 @@ function levelMatchesFilter(levelName, filterStr) {
     return allowed.includes((levelName || "").trim());
 }
 
+// 同一種規則而家可以設定多過一條（entries 陣列）；舊格式嘅單一 Enabled/Value 欄位當做得一條嚟睇，保持向下相容。
+function getWheelAmountEntries(wheel) {
+    if (wheel.spinRuleAmountEntries && wheel.spinRuleAmountEntries.length) return wheel.spinRuleAmountEntries;
+    if (wheel.spinRuleAmountEnabled && wheel.spinRuleAmount > 0) return [{ id: "legacy", amount: wheel.spinRuleAmount }];
+    return [];
+}
+function getWheelMembershipEntries(wheel) {
+    if (wheel.spinRuleMembershipEntries && wheel.spinRuleMembershipEntries.length) return wheel.spinRuleMembershipEntries;
+    if (wheel.spinRuleMembershipEnabled && wheel.spinRuleMembershipCount > 0) return [{ id: "legacy", count: wheel.spinRuleMembershipCount }];
+    return [];
+}
+function getWheelMilestoneEntries(wheel) {
+    if (wheel.spinRuleMilestoneEntries && wheel.spinRuleMilestoneEntries.length) return wheel.spinRuleMilestoneEntries;
+    if (wheel.spinRuleMilestoneEnabled) return [{ id: "legacy", months: wheel.spinRuleMilestoneMonths || 0, level: wheel.spinRuleMilestoneLevel || "" }];
+    return [];
+}
+function getWheelNewSponsorEntries(wheel) {
+    if (wheel.spinRuleNewSponsorEntries && wheel.spinRuleNewSponsorEntries.length) return wheel.spinRuleNewSponsorEntries;
+    if (wheel.spinRuleNewSponsorEnabled) return [{ id: "legacy", level: wheel.spinRuleNewSponsorLevel || "" }];
+    return [];
+}
+function isWheelEnabled(wheel) {
+    return wheel.enabled !== false;
+}
+
 function genId() {
     return crypto.randomUUID();
 }
@@ -440,29 +465,32 @@ async function pollSuperChat(env) {
 
     const wheels = await fsListDocs(token, "wheels");
     for (const wheel of wheels) {
+        if (!isWheelEnabled(wheel)) continue;
         const newEntries = [];
-        if (wheel.spinRuleAmountEnabled && wheel.spinRuleAmount > 0) {
+        for (const entry of getWheelAmountEntries(wheel)) {
+            if (!(entry.amount > 0)) continue;
             for (const { name, amount } of amountCreditQueueAdds) {
-                const n = Math.floor(amount / wheel.spinRuleAmount);
+                const n = Math.floor(amount / entry.amount);
                 for (let i = 0; i < n; i++) newEntries.push({ id: genId(), name, source: "課金", time: formatMs(Date.now() - (session.sessionStartTime || Date.now())) });
             }
         }
-        if (wheel.spinRuleMembershipEnabled && wheel.spinRuleMembershipCount > 0) {
+        for (const entry of getWheelMembershipEntries(wheel)) {
+            if (!(entry.count > 0)) continue;
             for (const { name, count } of membershipCreditQueueAdds) {
-                const n = Math.floor(count / wheel.spinRuleMembershipCount);
+                const n = Math.floor(count / entry.count);
                 for (let i = 0; i < n; i++) newEntries.push({ id: genId(), name, source: "送會員", time: formatMs(Date.now() - (session.sessionStartTime || Date.now())) });
             }
         }
-        if (wheel.spinRuleMilestoneEnabled) {
+        for (const entry of getWheelMilestoneEntries(wheel)) {
             for (const { name, memberMonth, memberLevelName } of milestoneCreditQueueAdds) {
-                if ((memberMonth || 0) < (wheel.spinRuleMilestoneMonths || 0)) continue;
-                if (!levelMatchesFilter(memberLevelName, wheel.spinRuleMilestoneLevel)) continue;
+                if ((memberMonth || 0) < (entry.months || 0)) continue;
+                if (!levelMatchesFilter(memberLevelName, entry.level)) continue;
                 newEntries.push({ id: genId(), name, source: "會員里程碑", time: formatMs(Date.now() - (session.sessionStartTime || Date.now())) });
             }
         }
-        if (wheel.spinRuleNewSponsorEnabled) {
+        for (const entry of getWheelNewSponsorEntries(wheel)) {
             for (const { name, memberLevelName } of newSponsorCreditQueueAdds) {
-                if (!levelMatchesFilter(memberLevelName, wheel.spinRuleNewSponsorLevel)) continue;
+                if (!levelMatchesFilter(memberLevelName, entry.level)) continue;
                 newEntries.push({ id: genId(), name, source: "新／升級會員", time: formatMs(Date.now() - (session.sessionStartTime || Date.now())) });
             }
         }
