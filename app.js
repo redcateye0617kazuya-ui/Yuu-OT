@@ -1115,61 +1115,64 @@ function buildWheelBlock(wheel) {
     block.innerHTML = `
         <div class="wheel-block-header">
             <input type="text" class="wheel-name-input" value="${escapeHtml(wheel.name || "")}">
-            <label class="wheel-enabled-toggle"><input type="checkbox" class="wheel-enabled-cb" ${wheel.enabled !== false ? "checked" : ""}> 啟用</label>
+            <label class="wheel-enabled-toggle toggle-switch">
+                <input type="checkbox" class="wheel-enabled-cb" ${wheel.enabled !== false ? "checked" : ""}>
+                <span class="toggle-slider"></span>
+            </label>
             <button type="button" class="del-wheel-btn">刪除輪盤</button>
         </div>
-        <div class="wheel-credit-rules">
-            <div class="wheel-rule-group">
-                <div class="wheel-rule-group-title">課金金額門檻</div>
-                <div class="wheel-rule-chip-list">
-                    ${amountEntries.map((e) => ruleChip("spinRuleAmountEntries", e.id, `每 $${e.amount} 送一次`)).join("") || '<span class="no-effect-tag">未設定</span>'}
-                </div>
-                <div class="wheel-rule-add-row">
-                    <input type="number" class="wr-amount-new" placeholder="金額 $">
-                    <button type="button" class="wr-amount-add-btn">加條件</button>
-                </div>
-            </div>
-            <div class="wheel-rule-group">
-                <div class="wheel-rule-group-title">送會員個數門檻</div>
-                <div class="wheel-rule-chip-list">
-                    ${membershipEntries.map((e) => ruleChip("spinRuleMembershipEntries", e.id, `單次送${e.count}個送一次`)).join("") || '<span class="no-effect-tag">未設定</span>'}
-                </div>
-                <div class="wheel-rule-add-row">
-                    <input type="number" class="wr-membership-new" placeholder="個數">
-                    <button type="button" class="wr-membership-add-btn">加條件</button>
-                </div>
-            </div>
-            <div class="wheel-rule-group">
-                <div class="wheel-rule-group-title">每日定時</div>
-                <label class="spin-rule-label">
-                    <input type="checkbox" class="wr-daily-enabled" ${wheel.spinRuleDailyEnabled ? "checked" : ""}>
-                    每日 <input type="time" class="wr-daily-value" value="${wheel.spinRuleDailyTime || ""}" style="display:${wheel.spinRuleDailyEnabled ? "" : "none"};">
-                    送一次機會
-                </label>
-            </div>
-            <div class="wheel-rule-group">
-                <div class="wheel-rule-group-title">會員里程碑留言</div>
-                <div class="wheel-rule-chip-list">
-                    ${milestoneEntries.map((e) => ruleChip("spinRuleMilestoneEntries", e.id, `${e.months}個月或以上${e.level ? `，級別：${escapeHtml(e.level)}` : "（不限級別）"}`)).join("") || '<span class="no-effect-tag">未設定</span>'}
-                </div>
-                <div class="wheel-rule-add-row">
-                    <input type="number" class="wr-milestone-new-months" placeholder="個月">
-                    <input type="text" class="wr-milestone-new-level" placeholder="級別，留空=不限，可逗號分隔">
-                    <button type="button" class="wr-milestone-add-btn">加條件</button>
-                </div>
-            </div>
-            <div class="wheel-rule-group">
-                <div class="wheel-rule-group-title">新會員加入／升級會員等級</div>
-                <div class="wheel-rule-chip-list">
-                    ${newSponsorEntries.map((e) => ruleChip("spinRuleNewSponsorEntries", e.id, e.level ? `級別：${escapeHtml(e.level)}` : "（不限級別）")).join("") || '<span class="no-effect-tag">未設定</span>'}
-                </div>
-                <div class="wheel-rule-add-row">
-                    <input type="text" class="wr-newsponsor-new-level" placeholder="級別，留空=不限，可逗號分隔">
-                    <button type="button" class="wr-newsponsor-add-btn">加條件</button>
-                </div>
-            </div>
-        </div>
         <div class="wheel-block-body">
+            <div class="wheel-rule-col wheel-credit-rules">
+                <div class="wheel-rule-group">
+                    <div class="wheel-rule-group-title">課金金額門檻</div>
+                    <div class="wheel-rule-chip-list">
+                        ${amountEntries.map((e) => ruleChip("spinRuleAmountEntries", e.id, `每 $${e.amount} 送一次`)).join("") || '<span class="no-effect-tag">未設定</span>'}
+                    </div>
+                    <div class="wheel-rule-add-row">
+                        <input type="number" class="wr-amount-new" placeholder="金額 $">
+                        <button type="button" class="wr-amount-add-btn">加條件</button>
+                    </div>
+                </div>
+                <div class="wheel-rule-group">
+                    <div class="wheel-rule-group-title">送會員個數門檻</div>
+                    <div class="wheel-rule-chip-list">
+                        ${membershipEntries.map((e) => ruleChip("spinRuleMembershipEntries", e.id, `單次送${e.count}個送一次`)).join("") || '<span class="no-effect-tag">未設定</span>'}
+                    </div>
+                    <div class="wheel-rule-add-row">
+                        <input type="number" class="wr-membership-new" placeholder="個數">
+                        <button type="button" class="wr-membership-add-btn">加條件</button>
+                    </div>
+                </div>
+                <div class="wheel-rule-group">
+                    <div class="wheel-rule-group-title">每日定時</div>
+                    <label class="spin-rule-label">
+                        <input type="checkbox" class="wr-daily-enabled" ${wheel.spinRuleDailyEnabled ? "checked" : ""}>
+                        每日 <input type="time" class="wr-daily-value" value="${wheel.spinRuleDailyTime || ""}" style="display:${wheel.spinRuleDailyEnabled ? "" : "none"};">
+                        送一次機會
+                    </label>
+                </div>
+                <div class="wheel-rule-group">
+                    <div class="wheel-rule-group-title">會員里程碑留言</div>
+                    <div class="wheel-rule-chip-list">
+                        ${milestoneEntries.map((e) => ruleChip("spinRuleMilestoneEntries", e.id, `${e.months}個月或以上${e.level ? `，級別：${escapeHtml(e.level)}` : "（不限級別）"}`)).join("") || '<span class="no-effect-tag">未設定</span>'}
+                    </div>
+                    <div class="wheel-rule-add-row">
+                        <input type="number" class="wr-milestone-new-months" placeholder="個月">
+                        <input type="text" class="wr-milestone-new-level" placeholder="級別，留空=不限，可逗號分隔">
+                        <button type="button" class="wr-milestone-add-btn">加條件</button>
+                    </div>
+                </div>
+                <div class="wheel-rule-group">
+                    <div class="wheel-rule-group-title">新會員加入／升級會員等級</div>
+                    <div class="wheel-rule-chip-list">
+                        ${newSponsorEntries.map((e) => ruleChip("spinRuleNewSponsorEntries", e.id, e.level ? `級別：${escapeHtml(e.level)}` : "（不限級別）")).join("") || '<span class="no-effect-tag">未設定</span>'}
+                    </div>
+                    <div class="wheel-rule-add-row">
+                        <input type="text" class="wr-newsponsor-new-level" placeholder="級別，留空=不限，可逗號分隔">
+                        <button type="button" class="wr-newsponsor-add-btn">加條件</button>
+                    </div>
+                </div>
+            </div>
             <div class="wheel-items-col">
                 <div class="wheel-item-add-row">
                     <input type="text" placeholder="項目名稱" class="wheel-item-label">
