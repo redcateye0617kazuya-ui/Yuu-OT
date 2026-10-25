@@ -202,6 +202,14 @@ function applyBonusTimeDelta(data, deltaMs, updatePayload) {
     }
 }
 
+// 雙倍加鐘開關：開住嗰陣，之後新嚟嘅 SuperChat 先會當雙倍計落加鐘門檻（唔影響已經計咗嘅舊紀錄）。
+function getBonusEffectiveBase(data) {
+    return data.bonusEffectiveAmount != null ? data.bonusEffectiveAmount : (data.totalAmount || 0);
+}
+function getBonusMultiplier(data) {
+    return data.doubleBonusActive ? 2 : 1;
+}
+
 let fxRatesCache = null;
 async function ensureFxRates() {
     if (fxRatesCache) return fxRatesCache;
@@ -355,6 +363,8 @@ async function pollSuperChat(env) {
         const newSponsorEvents = [...(data.currentSessionNewSponsorEvents || [])];
         const leaderboardSc = [...(data.leaderboardSc || [])];
         let totalAmount = data.totalAmount || 0;
+        let effectiveAmount = getBonusEffectiveBase(data);
+        const bonusMultiplier = getBonusMultiplier(data);
 
         amountCreditQueueAdds = [];
         membershipCreditQueueAdds = [];
@@ -384,6 +394,7 @@ async function pollSuperChat(env) {
                 if (existing) existing.amount += amount; else leaderboardSc.push({ name, amount });
 
                 totalAmount += amount;
+                effectiveAmount += amount * bonusMultiplier;
                 amountCreditQueueAdds.push({ name, amount });
                 anyNew = true;
             } else if (item.snippet.type === "membershipGiftingEvent") {
@@ -436,12 +447,13 @@ async function pollSuperChat(env) {
             return;
         }
 
-        const newBonusMs = computeBonusMs(totalAmount, rules);
+        const newBonusMs = computeBonusMs(effectiveAmount, rules);
         const oldBonusMs = data.bonusMsGranted || 0;
         const deltaMs = newBonusMs - oldBonusMs;
 
         const updatePayload = {
             totalAmount,
+            bonusEffectiveAmount: effectiveAmount,
             bonusMsGranted: newBonusMs,
             currentSessionScEvents: scEvents,
             currentSessionMembershipEvents: membershipEvents,

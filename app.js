@@ -152,6 +152,9 @@ function updateStatCards(data) {
     const contribEl = document.getElementById("statContribTotal");
     if (contribEl) contribEl.textContent = `$${(data.totalAmount || 0).toLocaleString()}`;
 
+    const doubleBonusCb = document.getElementById("doubleBonusCb");
+    if (doubleBonusCb) doubleBonusCb.checked = !!data.doubleBonusActive;
+
     lastCampaignUpdateTime = Date.now();
 }
 
@@ -241,6 +244,16 @@ function applyBonusTimeDelta(data, deltaMs, updatePayload) {
     } else {
         updatePayload.targetEndTime = (data.targetEndTime || Date.now()) + deltaMs;
     }
+}
+
+// 雙倍加鐘開關：開住嗰陣，之後新嚟嘅 SuperChat／PayMe 先會當雙倍計落加鐘門檻（唔影響已經計咗嘅舊紀錄）。
+// bonusEffectiveAmount 係獨立於 totalAmount 嘅「加鐘專用」累積金額，用嚟畀 computeBonusMs 攞嚟計加鐘；
+// totalAmount 本身（顯示嘅Total、排行榜）永遠都係真實金額，唔會被雙倍影響。
+function getBonusEffectiveBase(data) {
+    return data.bonusEffectiveAmount != null ? data.bonusEffectiveAmount : (data.totalAmount || 0);
+}
+function getBonusMultiplier(data) {
+    return data.doubleBonusActive ? 2 : 1;
 }
 
 // ==========================================
@@ -471,6 +484,7 @@ async function startSession() {
         updatePayload.targetEndTime = now + hoursToAdd * 3600000;
         updatePayload.pausedRemainingMs = 0;
         updatePayload.totalAmount = 0;
+        updatePayload.bonusEffectiveAmount = 0;
         updatePayload.bonusMsGranted = 0;
         updatePayload.leaderboardSc = [];
         updatePayload.leaderboardPayme = [];
@@ -607,7 +621,7 @@ async function resetCampaign() {
 
     await setDoc(campaignRef, {
         status: "idle", isPaused: false, startTime: null, targetEndTime: null, pausedRemainingMs: 0,
-        totalAmount: 0, bonusMsGranted: 0, leaderboardSc: [], leaderboardPayme: [],
+        totalAmount: 0, bonusEffectiveAmount: 0, doubleBonusActive: false, bonusMsGranted: 0, leaderboardSc: [], leaderboardPayme: [],
         currentSession: { active: false }, currentSessionScEvents: [], currentSessionPaymeEvents: [],
         currentSessionMembershipEvents: [], currentSessionMilestoneEvents: [],
         currentSessionNewSponsorEvents: []
@@ -646,12 +660,14 @@ async function addContributionAndRecalc({ isSuperChat, id, name, amount, eventTi
         else leaderboard.push({ name, amount });
 
         const newTotal = (data.totalAmount || 0) + amount;
-        const newBonusMs = computeBonusMs(newTotal, rulesCache);
+        const newEffectiveAmount = getBonusEffectiveBase(data) + amount * getBonusMultiplier(data);
+        const newBonusMs = computeBonusMs(newEffectiveAmount, rulesCache);
         const oldBonusMs = data.bonusMsGranted || 0;
         const deltaMs = newBonusMs - oldBonusMs;
 
         const updatePayload = {
             totalAmount: newTotal,
+            bonusEffectiveAmount: newEffectiveAmount,
             bonusMsGranted: newBonusMs,
             [sessionKey]: sessionEvents,
             [lbKey]: leaderboard
@@ -855,6 +871,10 @@ async function checkDailySpinCredits() {
     }
 }
 
+async function toggleDoubleBonus(enabled) {
+    await updateDoc(campaignRef, { doubleBonusActive: enabled });
+}
+
 async function addPayme() {
     const nameInput = document.getElementById("payme_name");
     const amountInput = document.getElementById("payme_amount");
@@ -996,7 +1016,7 @@ async function reapplyRulesToCampaign() {
     if (!snap.exists()) return;
     const data = snap.data();
     if (!data.status || data.status === "idle") return;
-    const newBonusMs = computeBonusMs(data.totalAmount || 0, rulesCache);
+    const newBonusMs = computeBonusMs(getBonusEffectiveBase(data), rulesCache);
     const deltaMs = newBonusMs - (data.bonusMsGranted || 0);
     if (deltaMs === 0) return;
     const updatePayload = { bonusMsGranted: newBonusMs };
@@ -1703,11 +1723,13 @@ async function editArchivedScAmount(sessionId, eventId) {
         if (existing) existing.amount = Math.max(0, existing.amount + delta);
 
         const newTotal = Math.max(0, (campaignData.totalAmount || 0) + delta);
-        const newBonusMs = computeBonusMs(newTotal, rulesCache);
+        const newEffectiveAmount = Math.max(0, getBonusEffectiveBase(campaignData) + delta * getBonusMultiplier(campaignData));
+        const newBonusMs = computeBonusMs(newEffectiveAmount, rulesCache);
         const deltaMs = newBonusMs - (campaignData.bonusMsGranted || 0);
 
         const campaignUpdatePayload = {
             totalAmount: newTotal,
+            bonusEffectiveAmount: newEffectiveAmount,
             bonusMsGranted: newBonusMs,
             leaderboardSc: leaderboard
         };
@@ -1749,11 +1771,13 @@ async function editArchivedScTotal(sessionId) {
 
         const campaignData = freshCampaignSnap.data();
         const newCampaignTotal = Math.max(0, (campaignData.totalAmount || 0) + delta);
-        const newBonusMs = computeBonusMs(newCampaignTotal, rulesCache);
+        const newEffectiveAmount = Math.max(0, getBonusEffectiveBase(campaignData) + delta * getBonusMultiplier(campaignData));
+        const newBonusMs = computeBonusMs(newEffectiveAmount, rulesCache);
         const deltaMs = newBonusMs - (campaignData.bonusMsGranted || 0);
 
         const campaignUpdatePayload = {
             totalAmount: newCampaignTotal,
+            bonusEffectiveAmount: newEffectiveAmount,
             bonusMsGranted: newBonusMs
         };
         applyBonusTimeDelta(campaignData, deltaMs, campaignUpdatePayload);
@@ -1894,6 +1918,7 @@ window.addEventListener("DOMContentLoaded", () => {
     document.getElementById("finishBtn").addEventListener("click", finishMarathon);
     document.getElementById("resetBtn").addEventListener("click", resetCampaign);
     document.getElementById("addPaymeBtn").addEventListener("click", addPayme);
+    document.getElementById("doubleBonusCb").addEventListener("change", (e) => toggleDoubleBonus(e.target.checked));
     document.getElementById("addRuleBtn").addEventListener("click", addRule);
     document.getElementById("addWheelBtn").addEventListener("click", addWheel);
     document.getElementById("addNoteBtn").addEventListener("click", addNote);
