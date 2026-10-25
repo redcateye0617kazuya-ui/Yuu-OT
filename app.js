@@ -729,6 +729,33 @@ function levelMatchesFilter(levelName, filterStr) {
     return allowed.includes((levelName || "").trim());
 }
 
+// 以下幾個 get*Entries helper 將「同一種規則可以設定多過一條」統一返做一個 entries 陣列嚟睇；
+// 如果個輪盤文件仲係舊格式（單一 Enabled/Value 欄位），就當佢係得一條嘅 entries，保持向下相容。
+function getWheelAmountEntries(wheel) {
+    if (wheel.spinRuleAmountEntries && wheel.spinRuleAmountEntries.length) return wheel.spinRuleAmountEntries;
+    if (wheel.spinRuleAmountEnabled && wheel.spinRuleAmount > 0) return [{ id: "legacy", amount: wheel.spinRuleAmount }];
+    return [];
+}
+function getWheelMembershipEntries(wheel) {
+    if (wheel.spinRuleMembershipEntries && wheel.spinRuleMembershipEntries.length) return wheel.spinRuleMembershipEntries;
+    if (wheel.spinRuleMembershipEnabled && wheel.spinRuleMembershipCount > 0) return [{ id: "legacy", count: wheel.spinRuleMembershipCount }];
+    return [];
+}
+function getWheelMilestoneEntries(wheel) {
+    if (wheel.spinRuleMilestoneEntries && wheel.spinRuleMilestoneEntries.length) return wheel.spinRuleMilestoneEntries;
+    if (wheel.spinRuleMilestoneEnabled) return [{ id: "legacy", months: wheel.spinRuleMilestoneMonths || 0, level: wheel.spinRuleMilestoneLevel || "" }];
+    return [];
+}
+function getWheelNewSponsorEntries(wheel) {
+    if (wheel.spinRuleNewSponsorEntries && wheel.spinRuleNewSponsorEntries.length) return wheel.spinRuleNewSponsorEntries;
+    if (wheel.spinRuleNewSponsorEnabled) return [{ id: "legacy", level: wheel.spinRuleNewSponsorLevel || "" }];
+    return [];
+}
+// 輪盤嘅總開關：關咗就完全唔送新機會（但個輪盤本身同已經排緊隊嘅機會唔受影響，可以照手動轉）。
+function isWheelEnabled(wheel) {
+    return wheel.enabled !== false;
+}
+
 // ==========================================
 // 抽獎機會：逐個輪盤自訂規則
 // ==========================================
@@ -747,42 +774,52 @@ async function appendSpinQueueEntries(wheelId, entries) {
 
 async function applyAmountSpinCreditRules(amount, name) {
     for (const wheel of wheelsCache) {
-        if (!wheel.spinRuleAmountEnabled || !(wheel.spinRuleAmount > 0)) continue;
-        const creditsToAdd = Math.floor(amount / wheel.spinRuleAmount);
-        if (creditsToAdd > 0) {
-            const newEntries = Array.from({ length: creditsToAdd }, () => ({ id: genId(), name, source: "課金", time: elapsedSessionTimeStr(Date.now()) }));
-            await appendSpinQueueEntries(wheel.id, newEntries);
+        if (!isWheelEnabled(wheel)) continue;
+        for (const entry of getWheelAmountEntries(wheel)) {
+            if (!(entry.amount > 0)) continue;
+            const creditsToAdd = Math.floor(amount / entry.amount);
+            if (creditsToAdd > 0) {
+                const newEntries = Array.from({ length: creditsToAdd }, () => ({ id: genId(), name, source: "課金", time: elapsedSessionTimeStr(Date.now()) }));
+                await appendSpinQueueEntries(wheel.id, newEntries);
+            }
         }
     }
 }
 
 async function applyMembershipSpinCreditRules(giftCount, name) {
     for (const wheel of wheelsCache) {
-        if (!wheel.spinRuleMembershipEnabled || !(wheel.spinRuleMembershipCount > 0)) continue;
-        const creditsToAdd = Math.floor(giftCount / wheel.spinRuleMembershipCount);
-        if (creditsToAdd > 0) {
-            const newEntries = Array.from({ length: creditsToAdd }, () => ({ id: genId(), name, source: "送會員", time: elapsedSessionTimeStr(Date.now()) }));
-            await appendSpinQueueEntries(wheel.id, newEntries);
+        if (!isWheelEnabled(wheel)) continue;
+        for (const entry of getWheelMembershipEntries(wheel)) {
+            if (!(entry.count > 0)) continue;
+            const creditsToAdd = Math.floor(giftCount / entry.count);
+            if (creditsToAdd > 0) {
+                const newEntries = Array.from({ length: creditsToAdd }, () => ({ id: genId(), name, source: "送會員", time: elapsedSessionTimeStr(Date.now()) }));
+                await appendSpinQueueEntries(wheel.id, newEntries);
+            }
         }
     }
 }
 
 async function applyMilestoneSpinCreditRules(memberMonth, name, memberLevelName) {
     for (const wheel of wheelsCache) {
-        if (!wheel.spinRuleMilestoneEnabled) continue;
-        if ((memberMonth || 0) < (wheel.spinRuleMilestoneMonths || 0)) continue;
-        if (!levelMatchesFilter(memberLevelName, wheel.spinRuleMilestoneLevel)) continue;
-        const newEntry = { id: genId(), name, source: "會員里程碑", time: elapsedSessionTimeStr(Date.now()) };
-        await appendSpinQueueEntries(wheel.id, [newEntry]);
+        if (!isWheelEnabled(wheel)) continue;
+        for (const entry of getWheelMilestoneEntries(wheel)) {
+            if ((memberMonth || 0) < (entry.months || 0)) continue;
+            if (!levelMatchesFilter(memberLevelName, entry.level)) continue;
+            const newEntry = { id: genId(), name, source: "會員里程碑", time: elapsedSessionTimeStr(Date.now()) };
+            await appendSpinQueueEntries(wheel.id, [newEntry]);
+        }
     }
 }
 
 async function applyNewSponsorSpinCreditRules(name, memberLevelName) {
     for (const wheel of wheelsCache) {
-        if (!wheel.spinRuleNewSponsorEnabled) continue;
-        if (!levelMatchesFilter(memberLevelName, wheel.spinRuleNewSponsorLevel)) continue;
-        const newEntry = { id: genId(), name, source: "新／升級會員", time: elapsedSessionTimeStr(Date.now()) };
-        await appendSpinQueueEntries(wheel.id, [newEntry]);
+        if (!isWheelEnabled(wheel)) continue;
+        for (const entry of getWheelNewSponsorEntries(wheel)) {
+            if (!levelMatchesFilter(memberLevelName, entry.level)) continue;
+            const newEntry = { id: genId(), name, source: "新／升級會員", time: elapsedSessionTimeStr(Date.now()) };
+            await appendSpinQueueEntries(wheel.id, [newEntry]);
+        }
     }
 }
 
@@ -799,6 +836,7 @@ async function checkDailySpinCredits() {
     const todayStr = getHKDateString(now);
     const nowHHMM = getHKTimeHHMM(now);
     for (const wheel of wheelsCache) {
+        if (!isWheelEnabled(wheel)) continue;
         if (!wheel.spinRuleDailyEnabled || !wheel.spinRuleDailyTime) continue;
         if (wheel.spinRuleDailyLastGrantDate === todayStr) continue;
         if (nowHHMM < wheel.spinRuleDailyTime) continue;
@@ -1063,58 +1101,74 @@ function renderWheels() {
 
 function buildWheelBlock(wheel) {
     const block = document.createElement("div");
-    block.className = "wheel-block";
+    block.className = wheel.enabled !== false ? "wheel-block" : "wheel-block wheel-disabled";
     const items = wheel.items || [];
     const spins = wheel.spins || [];
     const queue = wheel.spinQueue || [];
+    const amountEntries = getWheelAmountEntries(wheel);
+    const membershipEntries = getWheelMembershipEntries(wheel);
+    const milestoneEntries = getWheelMilestoneEntries(wheel);
+    const newSponsorEntries = getWheelNewSponsorEntries(wheel);
+
+    const ruleChip = (field, id, label) => `<span class="wheel-rule-chip">${label}<button type="button" class="del-rule-entry-btn" data-field="${field}" data-id="${id}">✕</button></span>`;
 
     block.innerHTML = `
         <div class="wheel-block-header">
             <input type="text" class="wheel-name-input" value="${escapeHtml(wheel.name || "")}">
+            <label class="wheel-enabled-toggle"><input type="checkbox" class="wheel-enabled-cb" ${wheel.enabled !== false ? "checked" : ""}> 啟用</label>
             <button type="button" class="del-wheel-btn">刪除輪盤</button>
         </div>
         <div class="wheel-credit-rules">
-            <label class="spin-rule-label">
-                <input type="checkbox" class="wr-amount-enabled" ${wheel.spinRuleAmountEnabled ? "checked" : ""}>
-                課金滿 <input type="number" class="wr-amount-value" value="${wheel.spinRuleAmount || ""}" placeholder="$" style="display:${wheel.spinRuleAmountEnabled ? "" : "none"};">
-                送一次機會
-            </label>
-            <label class="spin-rule-label">
-                <input type="checkbox" class="wr-membership-enabled" ${wheel.spinRuleMembershipEnabled ? "checked" : ""}>
-                單次送會員達 <input type="number" class="wr-membership-value" value="${wheel.spinRuleMembershipCount || ""}" placeholder="個數" style="display:${wheel.spinRuleMembershipEnabled ? "" : "none"};">
-                個送一次機會
-            </label>
-            <label class="spin-rule-label">
-                <input type="checkbox" class="wr-daily-enabled" ${wheel.spinRuleDailyEnabled ? "checked" : ""}>
-                每日 <input type="time" class="wr-daily-value" value="${wheel.spinRuleDailyTime || ""}" style="display:${wheel.spinRuleDailyEnabled ? "" : "none"};">
-                送一次機會
-            </label>
-            <label class="spin-rule-label">
-                <input type="checkbox" class="wr-milestone-enabled" ${wheel.spinRuleMilestoneEnabled ? "checked" : ""}>
-                會員里程碑留言達 <input type="number" class="wr-milestone-value" value="${wheel.spinRuleMilestoneMonths || ""}" placeholder="個月" style="display:${wheel.spinRuleMilestoneEnabled ? "" : "none"};">
-                個月或以上，級別 <input type="text" class="wr-milestone-level" value="${escapeHtml(wheel.spinRuleMilestoneLevel || "")}" placeholder="留空=不限，可用逗號分隔多個" style="display:${wheel.spinRuleMilestoneEnabled ? "" : "none"};">
-                送一次機會
-            </label>
-            <label class="spin-rule-label">
-                <input type="checkbox" class="wr-newsponsor-enabled" ${wheel.spinRuleNewSponsorEnabled ? "checked" : ""}>
-                有新會員加入／升級會員等級，級別 <input type="text" class="wr-newsponsor-level" value="${escapeHtml(wheel.spinRuleNewSponsorLevel || "")}" placeholder="留空=不限，可用逗號分隔多個" style="display:${wheel.spinRuleNewSponsorEnabled ? "" : "none"};">
-                送一次機會
-            </label>
-            <button type="button" class="save-wheel-rules-btn">儲存規則</button>
-        </div>
-        ${(wheel.spinRuleAmountEnabled || wheel.spinRuleMembershipEnabled || wheel.spinRuleDailyEnabled || wheel.spinRuleMilestoneEnabled || wheel.spinRuleNewSponsorEnabled) ? `
-        <div class="wheel-spin-queue">
-            <div class="wheel-spin-history-title">抽獎機會排隊 List <span class="panel-subtitle">由舊到新，最上面下一個轉</span></div>
-            <div class="wheel-queue-list">
-                ${queue.length === 0 ? '<div class="empty-hint">暫時未有排緊隊嘅機會</div>' : queue.map((q) => `
-                    <div class="wheel-queue-row" data-queue-id="${q.id}">
-                        <span class="feed-name">${escapeHtml(q.name || "")}</span>
-                        <span class="feed-time">${q.source ? escapeHtml(q.source) : ""} ${escapeHtml(q.time || "")}</span>
-                        <button type="button" class="del-btn del-queue-btn">✕</button>
-                    </div>
-                `).join("")}
+            <div class="wheel-rule-group">
+                <div class="wheel-rule-group-title">課金金額門檻</div>
+                <div class="wheel-rule-chip-list">
+                    ${amountEntries.map((e) => ruleChip("spinRuleAmountEntries", e.id, `每 $${e.amount} 送一次`)).join("") || '<span class="no-effect-tag">未設定</span>'}
+                </div>
+                <div class="wheel-rule-add-row">
+                    <input type="number" class="wr-amount-new" placeholder="金額 $">
+                    <button type="button" class="wr-amount-add-btn">加條件</button>
+                </div>
             </div>
-        </div>` : ""}
+            <div class="wheel-rule-group">
+                <div class="wheel-rule-group-title">送會員個數門檻</div>
+                <div class="wheel-rule-chip-list">
+                    ${membershipEntries.map((e) => ruleChip("spinRuleMembershipEntries", e.id, `單次送${e.count}個送一次`)).join("") || '<span class="no-effect-tag">未設定</span>'}
+                </div>
+                <div class="wheel-rule-add-row">
+                    <input type="number" class="wr-membership-new" placeholder="個數">
+                    <button type="button" class="wr-membership-add-btn">加條件</button>
+                </div>
+            </div>
+            <div class="wheel-rule-group">
+                <div class="wheel-rule-group-title">每日定時</div>
+                <label class="spin-rule-label">
+                    <input type="checkbox" class="wr-daily-enabled" ${wheel.spinRuleDailyEnabled ? "checked" : ""}>
+                    每日 <input type="time" class="wr-daily-value" value="${wheel.spinRuleDailyTime || ""}" style="display:${wheel.spinRuleDailyEnabled ? "" : "none"};">
+                    送一次機會
+                </label>
+            </div>
+            <div class="wheel-rule-group">
+                <div class="wheel-rule-group-title">會員里程碑留言</div>
+                <div class="wheel-rule-chip-list">
+                    ${milestoneEntries.map((e) => ruleChip("spinRuleMilestoneEntries", e.id, `${e.months}個月或以上${e.level ? `，級別：${escapeHtml(e.level)}` : "（不限級別）"}`)).join("") || '<span class="no-effect-tag">未設定</span>'}
+                </div>
+                <div class="wheel-rule-add-row">
+                    <input type="number" class="wr-milestone-new-months" placeholder="個月">
+                    <input type="text" class="wr-milestone-new-level" placeholder="級別，留空=不限，可逗號分隔">
+                    <button type="button" class="wr-milestone-add-btn">加條件</button>
+                </div>
+            </div>
+            <div class="wheel-rule-group">
+                <div class="wheel-rule-group-title">新會員加入／升級會員等級</div>
+                <div class="wheel-rule-chip-list">
+                    ${newSponsorEntries.map((e) => ruleChip("spinRuleNewSponsorEntries", e.id, e.level ? `級別：${escapeHtml(e.level)}` : "（不限級別）")).join("") || '<span class="no-effect-tag">未設定</span>'}
+                </div>
+                <div class="wheel-rule-add-row">
+                    <input type="text" class="wr-newsponsor-new-level" placeholder="級別，留空=不限，可逗號分隔">
+                    <button type="button" class="wr-newsponsor-add-btn">加條件</button>
+                </div>
+            </div>
+        </div>
         <div class="wheel-block-body">
             <div class="wheel-items-col">
                 <div class="wheel-item-add-row">
@@ -1139,6 +1193,19 @@ function buildWheelBlock(wheel) {
                 </div>
                 <button type="button" class="spin-btn">轉！</button>
             </div>
+            ${(amountEntries.length || membershipEntries.length || wheel.spinRuleDailyEnabled || milestoneEntries.length || newSponsorEntries.length) ? `
+            <div class="wheel-queue-col wheel-spin-queue">
+                <div class="wheel-spin-history-title">抽獎機會排隊 List <span class="panel-subtitle">由舊到新，最上面下一個轉</span></div>
+                <div class="wheel-queue-list">
+                    ${queue.length === 0 ? '<div class="empty-hint">暫時未有排緊隊嘅機會</div>' : queue.map((q) => `
+                        <div class="wheel-queue-row" data-queue-id="${q.id}">
+                            <span class="feed-name">${escapeHtml(q.name || "")}</span>
+                            <span class="feed-time">${q.source ? escapeHtml(q.source) : ""} ${escapeHtml(q.time || "")}</span>
+                            <button type="button" class="del-btn del-queue-btn">✕</button>
+                        </div>
+                    `).join("")}
+                </div>
+            </div>` : ""}
         </div>
         <div class="wheel-spin-history">
             <div class="wheel-spin-history-title">輪盤記錄</div>
@@ -1154,35 +1221,50 @@ function buildWheelBlock(wheel) {
     `;
 
     block.querySelector(".wheel-name-input").addEventListener("change", (e) => renameWheel(wheel.id, e.target.value));
+    block.querySelector(".wheel-enabled-cb").addEventListener("change", (e) => toggleWheelEnabled(wheel.id, e.target.checked));
     block.querySelector(".del-wheel-btn").addEventListener("click", () => deleteWheel(wheel.id));
     block.querySelector(".add-wheel-item-btn").addEventListener("click", () => addWheelItem(wheel.id, block));
 
-    const amountEnabledCb = block.querySelector(".wr-amount-enabled");
-    const amountValueInput = block.querySelector(".wr-amount-value");
-    amountEnabledCb.addEventListener("change", () => { amountValueInput.style.display = amountEnabledCb.checked ? "" : "none"; });
-
-    const membershipEnabledCb = block.querySelector(".wr-membership-enabled");
-    const membershipValueInput = block.querySelector(".wr-membership-value");
-    membershipEnabledCb.addEventListener("change", () => { membershipValueInput.style.display = membershipEnabledCb.checked ? "" : "none"; });
+    block.querySelector(".wr-amount-add-btn").addEventListener("click", () => {
+        const input = block.querySelector(".wr-amount-new");
+        const amount = parseFloat(input.value);
+        if (isNaN(amount) || amount <= 0) { alert("請輸入有效金額"); return; }
+        addWheelRuleEntry(wheel.id, "spinRuleAmountEntries", { id: genId(), amount });
+        input.value = "";
+    });
+    block.querySelector(".wr-membership-add-btn").addEventListener("click", () => {
+        const input = block.querySelector(".wr-membership-new");
+        const count = parseInt(input.value, 10);
+        if (isNaN(count) || count <= 0) { alert("請輸入有效個數"); return; }
+        addWheelRuleEntry(wheel.id, "spinRuleMembershipEntries", { id: genId(), count });
+        input.value = "";
+    });
+    block.querySelector(".wr-milestone-add-btn").addEventListener("click", () => {
+        const monthsInput = block.querySelector(".wr-milestone-new-months");
+        const levelInput = block.querySelector(".wr-milestone-new-level");
+        const months = parseInt(monthsInput.value, 10);
+        if (isNaN(months) || months <= 0) { alert("請輸入有效個月數"); return; }
+        addWheelRuleEntry(wheel.id, "spinRuleMilestoneEntries", { id: genId(), months, level: levelInput.value.trim() });
+        monthsInput.value = "";
+        levelInput.value = "";
+    });
+    block.querySelector(".wr-newsponsor-add-btn").addEventListener("click", () => {
+        const levelInput = block.querySelector(".wr-newsponsor-new-level");
+        addWheelRuleEntry(wheel.id, "spinRuleNewSponsorEntries", { id: genId(), level: levelInput.value.trim() });
+        levelInput.value = "";
+    });
+    block.querySelectorAll(".del-rule-entry-btn").forEach((btn) => {
+        btn.addEventListener("click", () => deleteWheelRuleEntry(wheel.id, btn.dataset.field, btn.dataset.id));
+    });
 
     const dailyEnabledCb = block.querySelector(".wr-daily-enabled");
     const dailyValueInput = block.querySelector(".wr-daily-value");
-    dailyEnabledCb.addEventListener("change", () => { dailyValueInput.style.display = dailyEnabledCb.checked ? "" : "none"; });
-
-    const milestoneEnabledCb = block.querySelector(".wr-milestone-enabled");
-    const milestoneValueInput = block.querySelector(".wr-milestone-value");
-    const milestoneLevelInput = block.querySelector(".wr-milestone-level");
-    milestoneEnabledCb.addEventListener("change", () => {
-        const display = milestoneEnabledCb.checked ? "" : "none";
-        milestoneValueInput.style.display = display;
-        milestoneLevelInput.style.display = display;
+    dailyEnabledCb.addEventListener("change", () => {
+        dailyValueInput.style.display = dailyEnabledCb.checked ? "" : "none";
+        saveWheelDailyRule(wheel.id, dailyEnabledCb.checked, dailyValueInput.value);
     });
+    dailyValueInput.addEventListener("change", () => saveWheelDailyRule(wheel.id, dailyEnabledCb.checked, dailyValueInput.value));
 
-    const newSponsorEnabledCb = block.querySelector(".wr-newsponsor-enabled");
-    const newSponsorLevelInput = block.querySelector(".wr-newsponsor-level");
-    newSponsorEnabledCb.addEventListener("change", () => { newSponsorLevelInput.style.display = newSponsorEnabledCb.checked ? "" : "none"; });
-
-    block.querySelector(".save-wheel-rules-btn").addEventListener("click", () => saveWheelSpinRules(wheel.id, block));
     const affectsCheckbox = block.querySelector(".wheel-item-affects-timer");
     const hoursInputEl = block.querySelector(".wheel-item-hours");
     affectsCheckbox.addEventListener("change", () => {
@@ -1212,15 +1294,12 @@ function buildWheelBlock(wheel) {
 }
 
 async function addWheel() {
-    const name = prompt("請輸入新輪盤名稱：", "時間輪");
-    if (name === null) return;
+    const name = `輪盤${wheelsCache.length + 1}`;
     await addDoc(wheelsColRef, {
-        name: name.trim() || "未命名輪盤", items: [], spins: [], createdAt: Date.now(),
-        spinRuleAmountEnabled: false, spinRuleAmount: 0,
-        spinRuleMembershipEnabled: false, spinRuleMembershipCount: 0,
+        name, items: [], spins: [], createdAt: Date.now(), enabled: true,
+        spinRuleAmountEntries: [], spinRuleMembershipEntries: [],
         spinRuleDailyEnabled: false, spinRuleDailyTime: "", spinRuleDailyLastGrantDate: null,
-        spinRuleMilestoneEnabled: false, spinRuleMilestoneMonths: 0, spinRuleMilestoneLevel: "",
-        spinRuleNewSponsorEnabled: false, spinRuleNewSponsorLevel: "",
+        spinRuleMilestoneEntries: [], spinRuleNewSponsorEntries: [],
         spinQueue: []
     });
 }
@@ -1229,33 +1308,34 @@ async function renameWheel(wheelId, newName) {
     await updateDoc(doc(db, "wheels", wheelId), { name: newName.trim() || "未命名輪盤" });
 }
 
-async function saveWheelSpinRules(wheelId, blockEl) {
-    const amountEnabled = blockEl.querySelector(".wr-amount-enabled").checked;
-    const amountValue = parseFloat(blockEl.querySelector(".wr-amount-value").value) || 0;
-    const membershipEnabled = blockEl.querySelector(".wr-membership-enabled").checked;
-    const membershipValue = parseInt(blockEl.querySelector(".wr-membership-value").value, 10) || 0;
-    const dailyEnabled = blockEl.querySelector(".wr-daily-enabled").checked;
-    const dailyValue = blockEl.querySelector(".wr-daily-value").value || "";
-    const milestoneEnabled = blockEl.querySelector(".wr-milestone-enabled").checked;
-    const milestoneValue = parseInt(blockEl.querySelector(".wr-milestone-value").value, 10) || 0;
-    const milestoneLevel = blockEl.querySelector(".wr-milestone-level").value.trim();
-    const newSponsorEnabled = blockEl.querySelector(".wr-newsponsor-enabled").checked;
-    const newSponsorLevel = blockEl.querySelector(".wr-newsponsor-level").value.trim();
+async function toggleWheelEnabled(wheelId, enabled) {
+    await updateDoc(doc(db, "wheels", wheelId), { enabled });
+}
 
-    await updateDoc(doc(db, "wheels", wheelId), {
-        spinRuleAmountEnabled: amountEnabled,
-        spinRuleAmount: amountValue,
-        spinRuleMembershipEnabled: membershipEnabled,
-        spinRuleMembershipCount: membershipValue,
-        spinRuleDailyEnabled: dailyEnabled,
-        spinRuleDailyTime: dailyValue,
-        spinRuleMilestoneEnabled: milestoneEnabled,
-        spinRuleMilestoneMonths: milestoneValue,
-        spinRuleMilestoneLevel: milestoneLevel,
-        spinRuleNewSponsorEnabled: newSponsorEnabled,
-        spinRuleNewSponsorLevel: newSponsorLevel
+async function saveWheelDailyRule(wheelId, enabled, time) {
+    await updateDoc(doc(db, "wheels", wheelId), { spinRuleDailyEnabled: enabled, spinRuleDailyTime: time || "" });
+}
+
+// 幫某一種抽獎機會規則加一條新 entry（同一種規則而家可以加多過一條）；
+// 用 transaction 重新讀一次個 wheel 文件先寫，避免同其他人／分頁改緊規則撞期。
+async function addWheelRuleEntry(wheelId, arrayField, entry) {
+    const wheelRef = doc(db, "wheels", wheelId);
+    await runTransaction(db, async (transaction) => {
+        const snap = await transaction.get(wheelRef);
+        if (!snap.exists()) return;
+        const entries = [...(snap.data()[arrayField] || []), entry];
+        transaction.update(wheelRef, { [arrayField]: entries });
     });
-    alert("已儲存呢個輪盤嘅抽獎機會規則");
+}
+
+async function deleteWheelRuleEntry(wheelId, arrayField, entryId) {
+    const wheelRef = doc(db, "wheels", wheelId);
+    await runTransaction(db, async (transaction) => {
+        const snap = await transaction.get(wheelRef);
+        if (!snap.exists()) return;
+        const entries = (snap.data()[arrayField] || []).filter((e) => e.id !== entryId);
+        transaction.update(wheelRef, { [arrayField]: entries });
+    });
 }
 
 async function deleteWheel(wheelId) {
