@@ -502,7 +502,8 @@ async function pollSuperChat(env) {
             for (const { name, memberMonth, memberLevelName } of milestoneCreditQueueAdds) {
                 if ((memberMonth || 0) < (entry.months || 0)) continue;
                 if (!levelMatchesFilter(memberLevelName, entry.level)) continue;
-                newEntries.push({ id: genId(), name, source: "會員里程碑", time: formatMs(Date.now() - (session.sessionStartTime || Date.now())) });
+                const times = entry.times > 0 ? entry.times : 1;
+                for (let i = 0; i < times; i++) newEntries.push({ id: genId(), name, source: "會員里程碑", time: formatMs(Date.now() - (session.sessionStartTime || Date.now())) });
             }
         }
         for (const entry of getWheelNewSponsorEntries(wheel)) {
