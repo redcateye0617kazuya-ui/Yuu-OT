@@ -827,8 +827,9 @@ async function applyMilestoneSpinCreditRules(memberMonth, name, memberLevelName)
         for (const entry of getWheelMilestoneEntries(wheel)) {
             if ((memberMonth || 0) < (entry.months || 0)) continue;
             if (!levelMatchesFilter(memberLevelName, entry.level)) continue;
-            const newEntry = { id: genId(), name, source: "會員里程碑", time: elapsedSessionTimeStr(Date.now()) };
-            await appendSpinQueueEntries(wheel.id, [newEntry]);
+            const times = entry.times > 0 ? entry.times : 1;
+            const newEntries = Array.from({ length: times }, () => ({ id: genId(), name, source: "會員里程碑", time: elapsedSessionTimeStr(Date.now()) }));
+            await appendSpinQueueEntries(wheel.id, newEntries);
         }
     }
 }
@@ -1270,11 +1271,12 @@ function buildWheelBlock(wheel) {
                 <div class="wheel-rule-group${milestoneGroupEnabled ? "" : " rule-group-disabled"}">
                     ${groupTitle("spinRuleMilestoneGroupEnabled", "會員里程碑留言")}
                     <div class="wheel-rule-chip-list">
-                        ${milestoneEntries.map((e) => ruleChip("spinRuleMilestoneEntries", e.id, `${e.months}個月或以上${e.level ? `，級別：${escapeHtml(e.level)}` : "（不限級別）"}`)).join("") || '<span class="no-effect-tag">未設定</span>'}
+                        ${milestoneEntries.map((e) => ruleChip("spinRuleMilestoneEntries", e.id, `${e.months}個月或以上${e.level ? `，級別：${escapeHtml(e.level)}` : "（不限級別）"}，${e.times > 0 ? e.times : 1}次機會`)).join("") || '<span class="no-effect-tag">未設定</span>'}
                     </div>
                     <div class="wheel-rule-add-row">
                         <input type="number" class="wr-milestone-new-months" placeholder="個月">
                         <input type="text" class="wr-milestone-new-level" placeholder="級別，留空=不限，可逗號分隔">
+                        <input type="number" class="wr-milestone-new-times" placeholder="次數" value="1" min="1">
                         <button type="button" class="wr-milestone-add-btn">加條件</button>
                     </div>
                 </div>
@@ -1368,11 +1370,15 @@ function buildWheelBlock(wheel) {
     block.querySelector(".wr-milestone-add-btn").addEventListener("click", () => {
         const monthsInput = block.querySelector(".wr-milestone-new-months");
         const levelInput = block.querySelector(".wr-milestone-new-level");
+        const timesInput = block.querySelector(".wr-milestone-new-times");
         const months = parseInt(monthsInput.value, 10);
         if (isNaN(months) || months <= 0) { alert("請輸入有效個月數"); return; }
-        addWheelRuleEntry(wheel.id, "spinRuleMilestoneEntries", { id: genId(), months, level: levelInput.value.trim() });
+        const times = parseInt(timesInput.value, 10);
+        if (isNaN(times) || times <= 0) { alert("請輸入有效次數"); return; }
+        addWheelRuleEntry(wheel.id, "spinRuleMilestoneEntries", { id: genId(), months, level: levelInput.value.trim(), times });
         monthsInput.value = "";
         levelInput.value = "";
+        timesInput.value = "1";
     });
     block.querySelector(".wr-newsponsor-add-btn").addEventListener("click", () => {
         const levelInput = block.querySelector(".wr-newsponsor-new-level");

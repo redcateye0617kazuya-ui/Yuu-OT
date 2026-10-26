@@ -324,7 +324,8 @@ async function main() {
             for (const { name, memberMonth, memberLevelName } of milestoneCreditQueueAdds) {
                 if ((memberMonth || 0) < (entry.months || 0)) continue;
                 if (!levelMatchesFilter(memberLevelName, entry.level)) continue;
-                newEntries.push({ id: crypto.randomUUID(), name, source: "會員里程碑", time: formatMs(Date.now() - sessionStart) });
+                const times = entry.times > 0 ? entry.times : 1;
+                for (let i = 0; i < times; i++) newEntries.push({ id: crypto.randomUUID(), name, source: "會員里程碑", time: formatMs(Date.now() - sessionStart) });
             }
         }
         for (const entry of getWheelNewSponsorEntries(wheel)) {
