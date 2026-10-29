@@ -24,7 +24,6 @@
                 <button class="tab-btn" data-tab="rule" data-title="Rule Setting">Rule Setting</button>
                 <button class="tab-btn" data-tab="wheel" data-title="輪盤">輪盤</button>
             </nav>
-            <button type="button" id="finishBtn" class="topbar-finish" disabled>完成直播</button>
             <button type="button" id="softResetBtn" class="topbar-reset">重設記錄</button>
         </header>
 
@@ -57,7 +56,10 @@
                 </div>
 
                 <div class="panel timer-panel" style="grid-area: timer;">
-                    <h3>剩餘加班時間</h3>
+                    <div class="timer-panel-header">
+                        <h3>剩餘加班時間</h3>
+                        <button type="button" id="finishBtn" class="topbar-finish" disabled>完成直播</button>
+                    </div>
                     <div class="timer-display" id="countdown">--:--:--</div>
                     <div class="status-text" id="statusBox">狀態：未開始</div>
                     <button type="button" id="pauseBtn" class="btn btn-warning timer-pause-btn" disabled>暫停</button>
