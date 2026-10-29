@@ -629,6 +629,23 @@ async function resetCampaign() {
     alert("已經全站重設完成！");
 }
 
+async function softResetCampaign() {
+    if (!confirm("確定要重設記錄？呢個動作會清空 Total 金額、排行榜、Timer、同埋所有已經 Cut Off 嘅單場直播記錄（Record/Report 歷史），但係會keep住所有加鐘規則同所有輪盤設定（包括輪盤入面已經排緊隊嘅名單）。真係要重設？")) return;
+    stopScPolling();
+
+    const sessionsSnap = await getDocs(sessionsColRef);
+    await Promise.all(sessionsSnap.docs.map((d) => deleteDoc(doc(db, "sessions", d.id))));
+
+    await updateDoc(campaignRef, {
+        status: "idle", isPaused: false, startTime: null, targetEndTime: null, pausedRemainingMs: 0,
+        totalAmount: 0, bonusEffectiveAmount: 0, doubleBonusActive: false, bonusMsGranted: 0, leaderboardSc: [], leaderboardPayme: [],
+        currentSession: { active: false }, currentSessionScEvents: [], currentSessionPaymeEvents: [],
+        currentSessionMembershipEvents: [], currentSessionMilestoneEvents: [],
+        currentSessionNewSponsorEvents: []
+    });
+    alert("已經重設記錄完成！規則同輪盤設定維持不變。");
+}
+
 // ==========================================
 // 課金（SuperChat / PayMe）寫入 + 規則引擎重算
 // ==========================================
@@ -1923,6 +1940,7 @@ window.addEventListener("DOMContentLoaded", () => {
     document.getElementById("cutoffBtn").addEventListener("click", cutOffSession);
     document.getElementById("finishBtn").addEventListener("click", finishMarathon);
     document.getElementById("resetBtn").addEventListener("click", resetCampaign);
+    document.getElementById("softResetBtn").addEventListener("click", softResetCampaign);
     document.getElementById("addPaymeBtn").addEventListener("click", addPayme);
     document.getElementById("doubleBonusCb").addEventListener("change", (e) => toggleDoubleBonus(e.target.checked));
     document.getElementById("addRuleBtn").addEventListener("click", addRule);
