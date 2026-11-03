@@ -1314,8 +1314,12 @@ function buildWheelBlock(wheel) {
             <div class="wheel-items-col">
                 <div class="wheel-item-add-row">
                     <input type="text" placeholder="項目名稱" class="wheel-item-label">
-                    <label class="wheel-item-toggle"><input type="checkbox" class="wheel-item-affects-timer"> 加鐘</label>
-                    <input type="number" placeholder="±小時" class="wheel-item-hours" style="display:none;">
+                    <label class="wheel-item-toggle"><input type="checkbox" class="wheel-item-affects-timer"> 時間輪盤</label>
+                    <span class="wheel-item-hours-stepper" style="display:none;">
+                        <button type="button" class="wheel-item-hours-step" data-delta="-1">－</button>
+                        <input type="number" placeholder="小時" class="wheel-item-hours" value="1" step="1">
+                        <button type="button" class="wheel-item-hours-step" data-delta="1">＋</button>
+                    </span>
                     <button type="button" class="add-wheel-item-btn">加</button>
                 </div>
                 <div class="wheel-item-list">
@@ -1428,11 +1432,22 @@ function buildWheelBlock(wheel) {
 
     const affectsCheckbox = block.querySelector(".wheel-item-affects-timer");
     const hoursInputEl = block.querySelector(".wheel-item-hours");
+    const hoursStepperEl = block.querySelector(".wheel-item-hours-stepper");
+    const itemLabelInputEl = block.querySelector(".wheel-item-label");
     if (affectsCheckbox && hoursInputEl) {
         affectsCheckbox.addEventListener("change", () => {
-            hoursInputEl.style.display = affectsCheckbox.checked ? "" : "none";
+            const on = affectsCheckbox.checked;
+            hoursStepperEl.style.display = on ? "" : "none";
+            if (itemLabelInputEl) itemLabelInputEl.style.display = on ? "none" : "";
         });
     }
+    block.querySelectorAll(".wheel-item-hours-step").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            const delta = parseFloat(btn.dataset.delta);
+            const current = parseFloat(hoursInputEl.value) || 0;
+            hoursInputEl.value = current + delta;
+        });
+    });
     block.querySelectorAll(".del-item-btn").forEach((btn) => {
         btn.addEventListener("click", () => deleteWheelItem(wheel.id, btn.closest(".wheel-item-row").dataset.itemId));
     });
@@ -1523,20 +1538,23 @@ async function addWheelItem(wheelId, blockEl) {
     const labelInput = blockEl.querySelector(".wheel-item-label");
     const affectsCheckbox = blockEl.querySelector(".wheel-item-affects-timer");
     const hoursInput = blockEl.querySelector(".wheel-item-hours");
-    const label = labelInput.value.trim();
-    if (!label) { alert("請輸入項目名稱"); return; }
 
-    let effectHours = null;
+    let label, effectHours = null;
     if (affectsCheckbox.checked) {
         const hrs = parseFloat(hoursInput.value);
-        if (isNaN(hrs)) { alert("請輸入小時數，或者取消勾選「加鐘」"); return; }
+        if (isNaN(hrs) || hrs === 0) { alert("請輸入有效嘅小時數（可以用 － / ＋ 調整）"); return; }
         effectHours = hrs;
+        label = `${hrs >= 0 ? "+" : ""}${hrs}`;
+    } else {
+        label = labelInput.value.trim();
+        if (!label) { alert("請輸入項目名稱"); return; }
     }
 
     const wheel = wheelsCache.find((w) => w.id === wheelId);
     if (!wheel) return;
     const items = [...(wheel.items || []), { id: genId(), label, effectHours }];
     await updateDoc(doc(db, "wheels", wheelId), { items });
+    labelInput.value = "";
 }
 
 async function deleteWheelItem(wheelId, itemId) {
