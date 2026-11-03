@@ -1313,14 +1313,16 @@ function buildWheelBlock(wheel) {
             ${!isListMode ? `
             <div class="wheel-items-col">
                 <div class="wheel-item-add-row">
-                    <input type="text" placeholder="項目名稱" class="wheel-item-label">
                     <label class="wheel-item-toggle"><input type="checkbox" class="wheel-item-affects-timer"> 時間輪盤</label>
-                    <span class="wheel-item-hours-stepper" style="display:none;">
-                        <button type="button" class="wheel-item-hours-step" data-delta="-1">－</button>
-                        <input type="number" placeholder="小時" class="wheel-item-hours" value="1" step="1">
-                        <button type="button" class="wheel-item-hours-step" data-delta="1">＋</button>
-                    </span>
-                    <button type="button" class="add-wheel-item-btn">加</button>
+                    <div class="wheel-item-add-fields">
+                        <input type="text" placeholder="項目名稱" class="wheel-item-label">
+                        <span class="wheel-item-hours-stepper" style="display:none;">
+                            <button type="button" class="wheel-item-hours-step" data-delta="-1">－</button>
+                            <input type="number" placeholder="小時" class="wheel-item-hours" value="1" step="1">
+                            <button type="button" class="wheel-item-hours-step" data-delta="1">＋</button>
+                        </span>
+                        <button type="button" class="add-wheel-item-btn">加</button>
+                    </div>
                 </div>
                 <div class="wheel-item-list">
                     ${items.map((it) => `
