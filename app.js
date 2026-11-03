@@ -1986,6 +1986,7 @@ window.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll(".tab-btn").forEach((btn) => {
         btn.addEventListener("click", () => switchTab(btn.dataset.tab));
     });
+    document.querySelector(".topbar-logo").addEventListener("click", () => switchTab("dashboard"));
 
     switchTab(localStorage.getItem(ACTIVE_TAB_STORAGE_KEY) || "dashboard");
 });
