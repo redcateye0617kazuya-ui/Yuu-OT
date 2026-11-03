@@ -1127,7 +1127,8 @@ function drawWheel(canvas, items) {
         ctx.textAlign = flipped ? "left" : "right";
         ctx.fillStyle = "#FFFFFF";
         ctx.font = "bold 22px sans-serif";
-        const label = item.label.length > 10 ? item.label.slice(0, 10) + "…" : item.label;
+        const displayLabel = item.effectHours != null ? `${item.label}h` : item.label;
+        const label = displayLabel.length > 10 ? displayLabel.slice(0, 10) + "…" : displayLabel;
         const textRadius = r * 0.6;
         ctx.fillText(label, flipped ? -textRadius : textRadius, 8);
         ctx.restore();
