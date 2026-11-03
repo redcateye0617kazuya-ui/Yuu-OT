@@ -42,7 +42,7 @@ body {
     display: flex; align-items: center; justify-content: space-between; gap: 20px;
     padding: 18px 32px; border-bottom: 1px solid var(--border-soft); flex-wrap: wrap;
 }
-.topbar-logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; color: var(--text-dark); }
+.topbar-logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; color: var(--text-dark); cursor: pointer; }
 .logo-dots { display: grid; grid-template-columns: repeat(2, 1fr); gap: 3px; width: 18px; height: 18px; }
 .logo-dots span { width: 7px; height: 7px; border-radius: 0; }
 .logo-dots span:nth-child(1) { background: var(--teal); }
