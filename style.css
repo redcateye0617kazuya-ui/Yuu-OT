@@ -302,9 +302,10 @@ body {
 .wheel-rule-add-row button { padding: 5px 10px; border-radius: 0; border: none; background: var(--teal); color: #FFFFFF; font-weight: 700; cursor: pointer; font-size: 11px; font-family: inherit; }
 .wheel-block-body { display: flex; gap: 20px; flex-wrap: wrap; }
 .wheel-items-col { flex: 1; min-width: 170px; max-width: 260px; }
-.wheel-item-add-row { display: flex; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; align-items: center; }
-.wheel-item-add-row input { flex: 1; padding: 5px 7px; border-radius: 0; border: 1px solid var(--border-soft); background: #FBFAF7; font-size: 11px; min-width: 0; }
-.wheel-item-add-row button { padding: 5px 10px; border-radius: 0; border: none; background: var(--navy); color: #FFFFFF; font-weight: 700; cursor: pointer; font-size: 11px; font-family: inherit; }
+.wheel-item-add-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.wheel-item-add-fields { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+.wheel-item-add-fields input { flex: 1; padding: 5px 7px; border-radius: 0; border: 1px solid var(--border-soft); background: #FBFAF7; font-size: 11px; min-width: 0; }
+.wheel-item-add-fields button { padding: 5px 10px; border-radius: 0; border: none; background: var(--navy); color: #FFFFFF; font-weight: 700; cursor: pointer; font-size: 11px; font-family: inherit; }
 .wheel-item-toggle { display: flex; align-items: center; gap: 3px; font-size: 10px; color: var(--text-muted); white-space: nowrap; }
 .wheel-item-hours-stepper { display: flex; align-items: center; gap: 3px; }
 .wheel-item-hours-stepper .wheel-item-hours { flex: none; width: 46px; text-align: center; padding: 5px 2px; }
