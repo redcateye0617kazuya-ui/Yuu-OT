@@ -1467,7 +1467,12 @@ function buildWheelBlock(wheel) {
         if (canvasEl) {
             drawWheel(canvasEl, items);
             const rot = wheelRotationState[wheel.id] || 0;
+            // 呢度淨係想將個新 canvas 元素定格喺上次轉完嘅角度，唔應該再播多次轉盤動畫，
+            // 所以要暫時關咗 CSS transition，set 完位先翻開，等真正㩒「轉！」先再有動畫。
+            canvasEl.style.transition = "none";
             canvasEl.style.transform = `rotate(${rot}deg)`;
+            void canvasEl.offsetWidth;
+            canvasEl.style.transition = "";
         }
     }, 0);
 
