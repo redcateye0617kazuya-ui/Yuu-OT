@@ -306,6 +306,9 @@ body {
 .wheel-item-add-row input { flex: 1; padding: 5px 7px; border-radius: 0; border: 1px solid var(--border-soft); background: #FBFAF7; font-size: 11px; min-width: 0; }
 .wheel-item-add-row button { padding: 5px 10px; border-radius: 0; border: none; background: var(--navy); color: #FFFFFF; font-weight: 700; cursor: pointer; font-size: 11px; font-family: inherit; }
 .wheel-item-toggle { display: flex; align-items: center; gap: 3px; font-size: 10px; color: var(--text-muted); white-space: nowrap; }
+.wheel-item-hours-stepper { display: flex; align-items: center; gap: 3px; }
+.wheel-item-hours-stepper .wheel-item-hours { flex: none; width: 46px; text-align: center; padding: 5px 2px; }
+.wheel-item-hours-step { padding: 5px 8px; }
 .wheel-item-row { display: flex; justify-content: space-between; align-items: center; background: transparent; border: none; border-bottom: 1px solid var(--border-soft); border-radius: 0; padding: 7px 2px; margin-bottom: 0; font-size: 11px; }
 .wheel-item-row:last-child { border-bottom: none; }
 .no-effect-tag { color: var(--text-muted); font-size: 10px; }
