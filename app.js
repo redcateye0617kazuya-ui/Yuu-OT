@@ -1164,33 +1164,32 @@ function drawWheel(canvas, items) {
         } else {
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
+            const px = textRadius * Math.cos(midAngle);
+            const py = textRadius * Math.sin(midAngle);
+            // 落在下半個輪盤嘅項目（py>0即係圓心喺文字上面），字序掉轉，
+            // 等個尾（最後一隻字）都係排喺靠近圓心嗰一端。
+            const reverse = py > 0;
             const columns = wrapLabelColumns(displayLabels[i], lineHeight, maxColumnHeight);
-            drawRadialColumns(ctx, columns, midAngle, textRadius, lineHeight, fontSize);
+            if (columns.length === 1) {
+                drawVerticalColumn(ctx, columns[0], px, py, lineHeight, reverse);
+            } else {
+                const colGap = fontSize * 1.05;
+                drawVerticalColumn(ctx, columns[0], px - colGap / 2, py, lineHeight, reverse);
+                drawVerticalColumn(ctx, columns[1], px + colGap / 2, py, lineHeight, reverse);
+            }
         }
     });
     ctx.restore();
 }
 
-// 直向字沿住呢格嘅半徑方向逐隻排（企直，唔會轉動），
-// 第一隻字最近邊、最後一隻字（個尾）最近圓心。
-// 多過一直行就左右分開排，兩行都係咁排。
-function drawRadialColumns(ctx, columns, midAngle, centerRadius, lineHeight, fontSize) {
-    const cosA = Math.cos(midAngle), sinA = Math.sin(midAngle);
-    if (columns.length === 1) {
-        drawOneRadialColumn(ctx, columns[0], cosA, sinA, centerRadius, lineHeight, 0, 0);
-        return;
-    }
-    const colGap = fontSize * 1.05;
-    const perpX = -sinA * colGap / 2, perpY = cosA * colGap / 2;
-    drawOneRadialColumn(ctx, columns[0], cosA, sinA, centerRadius, lineHeight, -perpX, -perpY);
-    drawOneRadialColumn(ctx, columns[1], cosA, sinA, centerRadius, lineHeight, perpX, perpY);
-}
-
-function drawOneRadialColumn(ctx, text, cosA, sinA, centerRadius, lineHeight, offsetX, offsetY) {
+// 每粒字企直、由上到下逐隻排（唔會跟住呢格嘅角度轉動），同參考圖嗰種
+// 直書風格一致；reverse=true 嗰陣掉轉順序，等個尾（最後一隻字）擺上面，
+// 靠近圓心嗰一端（用於下半個輪盤嘅項目）。
+function drawVerticalColumn(ctx, text, x, y, lineHeight, reverse) {
     const n = text.length;
-    for (let i = 0; i < n; i++) {
-        const rad = centerRadius + ((n - 1) / 2 - i) * lineHeight;
-        ctx.fillText(text[i], rad * cosA + offsetX, rad * sinA + offsetY);
+    for (let slot = 0; slot < n; slot++) {
+        const charIndex = reverse ? (n - 1 - slot) : slot;
+        ctx.fillText(text[charIndex], x, y + (slot - (n - 1) / 2) * lineHeight);
     }
 }
 
