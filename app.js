@@ -2180,7 +2180,7 @@ window.addEventListener("DOMContentLoaded", () => {
     document.getElementById("addNoteBtn").addEventListener("click", addNote);
     document.getElementById("copyApiKeyBtn").addEventListener("click", async () => {
         try {
-            await navigator.clipboard.writeText("AIzaSyCO1i0d_c7EO4jonhTx7ylib2-xAEbLa5M");
+            await navigator.clipboard.writeText("AIzaSyCaxNa2LMNJNWy9t7ctEfAWZJIp75IrpJw");
             alert("已複製！");
         } catch (e) {
             alert("複製失敗，請手動長按選取複製。");
