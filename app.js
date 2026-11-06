@@ -1338,7 +1338,7 @@ function buildWheelBlock(wheel) {
                         <button type="button" class="add-wheel-item-btn">加</button>
                     </div>
                 </div>
-                <div class="wheel-item-list">
+                <div class="wheel-item-list${items.length > 6 ? " wheel-item-list-compact" : ""}">
                     ${items.map((it) => `
                         <div class="wheel-item-row" data-item-id="${it.id}">
                             <span>${escapeHtml(it.label)}${it.effectHours != null ? `（${it.effectHours >= 0 ? "+" : ""}${it.effectHours}小時）` : ""}</span>
