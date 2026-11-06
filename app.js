@@ -1758,6 +1758,7 @@ function buildSessionCard(data, sessionId) {
             <td>${escapeHtml(p.name)}</td>
             <td>${escapeHtml(p.time)}</td>
             <td>$HKD ${(parseFloat(p.amount) || 0).toLocaleString()}</td>
+            <td><button type="button" class="del-btn session-table-del-btn" data-event-id="${p.id}">✕</button></td>
         </tr>
     `).join("");
 
@@ -1785,13 +1786,16 @@ function buildSessionCard(data, sessionId) {
         <div class="session-table-block">
             <div class="session-table-title">PayMe 詳細</div>
             <table class="session-table">
-                <thead><tr><th>用戶名</th><th>時間</th><th>金額</th></tr></thead>
-                <tbody>${paymeRows || '<tr><td colspan="3" class="empty-hint">此場無 PayMe 紀錄</td></tr>'}</tbody>
+                <thead><tr><th>用戶名</th><th>時間</th><th>金額</th><th></th></tr></thead>
+                <tbody>${paymeRows || '<tr><td colspan="4" class="empty-hint">此場無 PayMe 紀錄</td></tr>'}</tbody>
             </table>
         </div>
     `;
     card.querySelectorAll(".session-table-edit-btn").forEach((btn) => {
         btn.addEventListener("click", () => editArchivedScAmount(sessionId, btn.dataset.eventId));
+    });
+    card.querySelectorAll(".session-table-del-btn").forEach((btn) => {
+        btn.addEventListener("click", () => deleteArchivedPaymeEvent(sessionId, btn.dataset.eventId));
     });
     const totalEditBtn = card.querySelector(".session-total-edit-btn");
     if (totalEditBtn) totalEditBtn.addEventListener("click", () => editArchivedScTotal(sessionId));
@@ -1856,6 +1860,62 @@ async function editArchivedScAmount(sessionId, eventId) {
     });
     if (updated) {
         alert("已更新呢筆 SuperChat 金額");
+        await loadSessions();
+    }
+}
+
+// 刪除一場已經 Cut Off 咗嘅直播入面某一筆 PayMe 記錄（例如打錯咗/重複咗）。
+// 會連同嗰場記錄嘅小計、以及全馬拉松累積嘅排行榜、Total、加鐘規則一齊重新計算。
+async function deleteArchivedPaymeEvent(sessionId, eventId) {
+    const sessionRef = doc(db, "sessions", sessionId);
+    const sessionSnap = await getDoc(sessionRef);
+    if (!sessionSnap.exists()) return;
+    const currentEvent = (sessionSnap.data().paymeEvents || []).find((e) => e.id === eventId);
+    if (!currentEvent) return;
+
+    if (!confirm(`確定要刪除「${currentEvent.name}」呢筆 $HKD ${(parseFloat(currentEvent.amount) || 0).toLocaleString()} 嘅 PayMe 記錄？`)) return;
+
+    const updated = await runTransaction(db, async (transaction) => {
+        const freshSessionSnap = await transaction.get(sessionRef);
+        const freshCampaignSnap = await transaction.get(campaignRef);
+        if (!freshSessionSnap.exists() || !freshCampaignSnap.exists()) return false;
+
+        const sessionData = freshSessionSnap.data();
+        const events = sessionData.paymeEvents || [];
+        const event = events.find((e) => e.id === eventId);
+        if (!event) return false;
+
+        const amount = parseFloat(event.amount) || 0;
+        const remainingEvents = events.filter((e) => e.id !== eventId);
+        const delta = -amount;
+
+        const paymeTotal = remainingEvents.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+        const sessionTotal = (sessionData.scTotal || 0) + paymeTotal;
+
+        const campaignData = freshCampaignSnap.data();
+        const leaderboard = campaignData.leaderboardPayme || [];
+        const existing = leaderboard.find((e) => e.name === event.name);
+        if (existing) existing.amount = Math.max(0, existing.amount + delta);
+
+        const newTotal = Math.max(0, (campaignData.totalAmount || 0) + delta);
+        const newEffectiveAmount = Math.max(0, getBonusEffectiveBase(campaignData) + delta * getBonusMultiplier(campaignData));
+        const newBonusMs = computeBonusMs(newEffectiveAmount, rulesCache);
+        const deltaMs = newBonusMs - (campaignData.bonusMsGranted || 0);
+
+        const campaignUpdatePayload = {
+            totalAmount: newTotal,
+            bonusEffectiveAmount: newEffectiveAmount,
+            bonusMsGranted: newBonusMs,
+            leaderboardPayme: leaderboard
+        };
+        applyBonusTimeDelta(campaignData, deltaMs, campaignUpdatePayload);
+
+        transaction.update(sessionRef, { paymeEvents: remainingEvents, paymeTotal, sessionTotal });
+        transaction.update(campaignRef, campaignUpdatePayload);
+        return true;
+    });
+    if (updated) {
+        alert("已刪除呢筆 PayMe 記錄");
         await loadSessions();
     }
 }
