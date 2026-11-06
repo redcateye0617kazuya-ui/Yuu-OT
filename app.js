@@ -1102,7 +1102,7 @@ function drawWheel(canvas, items) {
         return;
     }
 
-    const palette = ["#E8734A", "#F0A93E", "#6B9E78", "#8D5B7C", "#C1552F", "#4F8C82", "#C99A3E", "#8C6E5A"];
+    const palette = ["#5C9E85", "#C9A76B", "#1F2F3D", "#B9AD98", "#C15B45", "#7C93A0", "#3F7A64", "#8D5B7C"];
     const sliceAngle = (Math.PI * 2) / items.length;
 
     ctx.save();
