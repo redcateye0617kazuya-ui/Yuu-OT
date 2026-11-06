@@ -1109,13 +1109,22 @@ function drawWheel(canvas, items) {
     const maxTextWidth = Math.max(26, textRadius * sliceAngle * 0.88);
     const displayLabels = items.map((it) => it.effectHours != null ? `${it.label}h` : it.label);
 
-    // 搵一個成個輪盤共用嘅字體大小：由22px開始縮，直至所有項目都放得落
-    // （放唔晒就拆兩行，好過淨係嗰個項目自己再縮細，等成個輪盤睇落大細一致）
+    // 搵一個成個輪盤共用嘅字體大小：優先揀一個全部項目都放得落單行嘅size，
+    // 盡量唔使拆兩行（拆兩行有機會將數字斷開，例如「30mins」拆做「3」/「0mins」）；
+    // 真係細到9px都仲放唔晒單行，先至退而求其次畀返拆兩行。
     let fontSize = 22;
-    for (; fontSize > 10; fontSize--) {
+    for (; fontSize > 9; fontSize--) {
         ctx.font = `bold ${fontSize}px sans-serif`;
-        const allFit = displayLabels.every((lbl) => fitsOneOrTwoLines(ctx, lbl, maxTextWidth));
-        if (allFit) break;
+        const allFitOneLine = displayLabels.every((lbl) => ctx.measureText(lbl).width <= maxTextWidth);
+        if (allFitOneLine) break;
+    }
+    if (fontSize <= 9) {
+        fontSize = 22;
+        for (; fontSize > 10; fontSize--) {
+            ctx.font = `bold ${fontSize}px sans-serif`;
+            const allFit = displayLabels.every((lbl) => fitsOneOrTwoLines(ctx, lbl, maxTextWidth));
+            if (allFit) break;
+        }
     }
     ctx.font = `bold ${fontSize}px sans-serif`;
 
@@ -1157,12 +1166,19 @@ function drawWheel(canvas, items) {
     ctx.restore();
 }
 
+// 唔想個斷字位啱啱好落喺一串數字中間（例如「30mins」斷做「3」／「0mins」），
+// 咁樣會好似將個數字斷開咗咁，睇落好怪。
+function splitsDigitRun(text, cut) {
+    return /[0-9]/.test(text[cut - 1]) && /[0-9]/.test(text[cut]);
+}
+
 // 將項目名試下拆做兩行（打橫嗰種，用嚟排英文/數字），每行都要放得入 maxWidth，
-// 搵最近中間嘅斷字位；真係太長就淨係截斷加「…」做保底。
+// 搵最近中間、又唔會斷開數字嘅斷字位；真係太長就淨係截斷加「…」做保底。
 function wrapLabelLines(ctx, text, maxWidth) {
     if (ctx.measureText(text).width <= maxWidth) return [text];
     let bestCut = null;
     for (let cut = 1; cut < text.length; cut++) {
+        if (splitsDigitRun(text, cut)) continue;
         const a = text.slice(0, cut), b = text.slice(cut);
         if (ctx.measureText(a).width <= maxWidth && ctx.measureText(b).width <= maxWidth) {
             if (bestCut === null || Math.abs(cut - text.length / 2) < Math.abs(bestCut - text.length / 2)) bestCut = cut;
@@ -1180,6 +1196,7 @@ function wrapLabelLines(ctx, text, maxWidth) {
 function fitsOneOrTwoLines(ctx, text, maxWidth) {
     if (ctx.measureText(text).width <= maxWidth) return true;
     for (let cut = 1; cut < text.length; cut++) {
+        if (splitsDigitRun(text, cut)) continue;
         if (ctx.measureText(text.slice(0, cut)).width <= maxWidth && ctx.measureText(text.slice(cut)).width <= maxWidth) return true;
     }
     return false;
