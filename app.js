@@ -1250,7 +1250,7 @@ function buildWheelBlock(wheel) {
                 <input type="checkbox" class="wheel-enabled-cb" ${wheel.enabled !== false ? "checked" : ""}>
                 <span class="toggle-slider"></span>
             </label>
-            <button type="button" class="del-wheel-btn">刪除輪盤</button>
+            <button type="button" class="del-wheel-btn" title="刪除輪盤">✕</button>
         </div>
         <div class="wheel-rules-section">
             <div class="wheel-rules-header">
