@@ -332,7 +332,7 @@ function setupCampaignSync() {
         if (recordTotalBox) recordTotalBox.innerText = `Total：$HKD ${(data.totalAmount || 0).toLocaleString()}`;
 
         renderLeaderboard("scLeaderboard", mergeLeaderboards(data.leaderboardSc, data.leaderboardPayme));
-        renderSessionFeed("sessionPaymeFeed", data.currentSessionPaymeEvents);
+        renderSessionFeed("sessionPaymeFeed", data.currentSessionPaymeEvents, true);
         renderSessionFeed("sessionScFeed", data.currentSessionScEvents);
         updateStatCards(data);
         updateLiveHoursStat();
@@ -369,7 +369,7 @@ function renderLeaderboard(containerId, list) {
     `).join("");
 }
 
-function renderSessionFeed(containerId, events) {
+function renderSessionFeed(containerId, events, deletable) {
     const container = document.getElementById(containerId);
     if (!container) return;
     if (!events || events.length === 0) {
@@ -381,14 +381,21 @@ function renderSessionFeed(containerId, events) {
         const fxHint = (e.originalCurrency && e.originalAmount != null)
             ? ` <span class="feed-fx-hint">(${escapeHtml(e.originalCurrency)} ${e.originalAmount.toLocaleString()})</span>`
             : "";
+        const delBtn = deletable ? `<button type="button" class="del-btn session-feed-del-btn" data-event-id="${e.id}">✕</button>` : "";
         return `
         <div class="session-feed-row">
             <span class="feed-name">${escapeHtml(e.name)}</span>
             <span class="feed-amount">$HKD ${(e.amount || 0).toLocaleString()}${fxHint}</span>
             <span class="feed-time">${escapeHtml(e.time || "")}</span>
+            ${delBtn}
         </div>
     `;
     }).join("");
+    if (deletable) {
+        container.querySelectorAll(".session-feed-del-btn").forEach((btn) => {
+            btn.addEventListener("click", () => deleteCurrentSessionPaymeEvent(btn.dataset.eventId));
+        });
+    }
 }
 
 // ==========================================
@@ -696,6 +703,50 @@ async function addContributionAndRecalc({ isSuperChat, id, name, amount, eventTi
     });
     if (added) await applyAmountSpinCreditRules(amount, name);
     return added;
+}
+
+// 刪除本場（未 Cut Off）嘅一筆 PayMe 記錄，同步調整 Total、PayMe 排行榜、同加鐘規則嘅 bonus 時數。
+async function deleteCurrentSessionPaymeEvent(eventId) {
+    const snap = await getDoc(campaignRef);
+    if (!snap.exists()) return;
+    const currentEvent = (snap.data().currentSessionPaymeEvents || []).find((e) => e.id === eventId);
+    if (!currentEvent) return;
+
+    if (!confirm(`確定要刪除「${currentEvent.name}」呢筆 $HKD ${(parseFloat(currentEvent.amount) || 0).toLocaleString()} 嘅 PayMe 記錄？`)) return;
+
+    await runTransaction(db, async (transaction) => {
+        const freshSnap = await transaction.get(campaignRef);
+        if (!freshSnap.exists()) return;
+        const data = freshSnap.data();
+
+        const events = data.currentSessionPaymeEvents || [];
+        const event = events.find((e) => e.id === eventId);
+        if (!event) return;
+
+        const amount = parseFloat(event.amount) || 0;
+        const remainingEvents = events.filter((e) => e.id !== eventId);
+        const delta = -amount;
+
+        const leaderboard = data.leaderboardPayme || [];
+        const existing = leaderboard.find((e) => e.name === event.name);
+        if (existing) existing.amount = Math.max(0, existing.amount + delta);
+
+        const newTotal = Math.max(0, (data.totalAmount || 0) + delta);
+        const newEffectiveAmount = Math.max(0, getBonusEffectiveBase(data) + delta * getBonusMultiplier(data));
+        const newBonusMs = computeBonusMs(newEffectiveAmount, rulesCache);
+        const deltaMs = newBonusMs - (data.bonusMsGranted || 0);
+
+        const updatePayload = {
+            currentSessionPaymeEvents: remainingEvents,
+            leaderboardPayme: leaderboard,
+            totalAmount: newTotal,
+            bonusEffectiveAmount: newEffectiveAmount,
+            bonusMsGranted: newBonusMs
+        };
+        applyBonusTimeDelta(data, deltaMs, updatePayload);
+
+        transaction.update(campaignRef, updatePayload);
+    });
 }
 
 // ==========================================
