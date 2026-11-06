@@ -1174,11 +1174,11 @@ function drawWheel(canvas, items) {
             const perpSign = flipped ? -1 : 1;
             const columns = wrapLabelColumns(displayLabels[i], lineHeight, maxColumnHeight);
             if (columns.length === 1) {
-                drawRotatedColumn(ctx, columns[0], textRadius, lineHeight, dir, 0, flipped);
+                drawRotatedColumn(ctx, columns[0], textRadius, lineHeight, dir, 0);
             } else {
                 const colGap = fontSize * 1.05;
-                drawRotatedColumn(ctx, columns[0], textRadius, lineHeight, dir, perpSign * (-colGap / 2), flipped);
-                drawRotatedColumn(ctx, columns[1], textRadius, lineHeight, dir, perpSign * (colGap / 2), flipped);
+                drawRotatedColumn(ctx, columns[0], textRadius, lineHeight, dir, perpSign * (-colGap / 2));
+                drawRotatedColumn(ctx, columns[1], textRadius, lineHeight, dir, perpSign * (colGap / 2));
             }
             ctx.restore();
         }
@@ -1186,15 +1186,13 @@ function drawWheel(canvas, items) {
     ctx.restore();
 }
 
-// 成嚿字跟住呢格嘅角度轉（同正常輪盤一樣，逐隻字咁排）；perp 係俾兩直行
-// 拆開排嗰陣用嚟喺側邊偏移返少少（放喺呢格嘅切線方向）。
-// startAtRim 決定邊隻字擺最出邊：轉多咗180度嘅格（左半邊）要由邊到中心
-// 先讀得順，右半邊就啱啱相反（由中心到邊），唔係嘅話成句字會倒轉晒。
-function drawRotatedColumn(ctx, text, textRadius, lineHeight, dir, perp, startAtRim) {
+// 成嚿字跟住呢格嘅角度轉（同正常輪盤一樣，由圓心向邊逐隻字咁排），
+// 第一隻字最近邊、最後一隻字（個尾）最近圓心；perp 係俾兩直行拆開排嗰陣
+// 用嚟喺側邊偏移返少少（放喺呢格嘅切線方向）。
+function drawRotatedColumn(ctx, text, textRadius, lineHeight, dir, perp) {
     const n = text.length;
     for (let i = 0; i < n; i++) {
-        const j = startAtRim ? i : (n - 1 - i);
-        ctx.fillText(text[i], dir * (textRadius - j * lineHeight), perp);
+        ctx.fillText(text[i], dir * (textRadius - i * lineHeight), perp);
     }
 }
 
