@@ -1162,34 +1162,33 @@ function drawWheel(canvas, items) {
             }
             ctx.restore();
         } else {
+            ctx.save();
+            const flipped = Math.cos(midAngle) < 0;
+            ctx.rotate(flipped ? midAngle + Math.PI : midAngle);
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
-            const px = textRadius * Math.cos(midAngle);
-            const py = textRadius * Math.sin(midAngle);
-            // 落在下半個輪盤嘅項目（py>0即係圓心喺文字上面），字序掉轉，
-            // 等個尾（最後一隻字）都係排喺靠近圓心嗰一端。
-            const reverse = py > 0;
+            const dir = flipped ? -1 : 1;
             const columns = wrapLabelColumns(displayLabels[i], lineHeight, maxColumnHeight);
             if (columns.length === 1) {
-                drawVerticalColumn(ctx, columns[0], px, py, lineHeight, reverse);
+                drawRotatedColumn(ctx, columns[0], textRadius, lineHeight, dir, 0);
             } else {
                 const colGap = fontSize * 1.05;
-                drawVerticalColumn(ctx, columns[0], px - colGap / 2, py, lineHeight, reverse);
-                drawVerticalColumn(ctx, columns[1], px + colGap / 2, py, lineHeight, reverse);
+                drawRotatedColumn(ctx, columns[0], textRadius, lineHeight, dir, -colGap / 2);
+                drawRotatedColumn(ctx, columns[1], textRadius, lineHeight, dir, colGap / 2);
             }
+            ctx.restore();
         }
     });
     ctx.restore();
 }
 
-// 每粒字企直、由上到下逐隻排（唔會跟住呢格嘅角度轉動），同參考圖嗰種
-// 直書風格一致；reverse=true 嗰陣掉轉順序，等個尾（最後一隻字）擺上面，
-// 靠近圓心嗰一端（用於下半個輪盤嘅項目）。
-function drawVerticalColumn(ctx, text, x, y, lineHeight, reverse) {
+// 成嚿字跟住呢格嘅角度轉（同正常輪盤一樣，由圓心向邊逐隻字咁排），
+// 第一隻字最近邊、最後一隻字（個尾）最近圓心；perp 係俾兩直行拆開排嗰陣
+// 用嚟喺側邊偏移返少少（放喺呢格嘅切線方向）。
+function drawRotatedColumn(ctx, text, textRadius, lineHeight, dir, perp) {
     const n = text.length;
-    for (let slot = 0; slot < n; slot++) {
-        const charIndex = reverse ? (n - 1 - slot) : slot;
-        ctx.fillText(text[charIndex], x, y + (slot - (n - 1) / 2) * lineHeight);
+    for (let i = 0; i < n; i++) {
+        ctx.fillText(text[i], dir * (textRadius - i * lineHeight), perp);
     }
 }
 
