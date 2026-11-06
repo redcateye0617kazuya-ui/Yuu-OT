@@ -1147,14 +1147,13 @@ function drawWheel(canvas, items) {
         ctx.fillStyle = "#2B2320";
 
         if (isHorizontal[i]) {
-            // 時間輪盤嘅字唔好鏡像，全部格都淨係跟住midAngle轉，方向keep住一致
-            // （左半邊有機會變成上下顛倒，但好過成個輪盤個方向亂七八糟）。
             ctx.save();
-            ctx.rotate(midAngle);
-            ctx.textAlign = "right";
+            const flipped = Math.cos(midAngle) < 0;
+            ctx.rotate(flipped ? midAngle + Math.PI : midAngle);
+            ctx.textAlign = flipped ? "left" : "right";
             ctx.textBaseline = "alphabetic";
             const lines = wrapLabelLines(ctx, displayLabels[i], maxTextWidth);
-            const x = textRadius;
+            const x = flipped ? -textRadius : textRadius;
             if (lines.length === 1) {
                 ctx.fillText(lines[0], x, 8);
             } else {
