@@ -1163,19 +1163,15 @@ function drawWheel(canvas, items) {
             }
             ctx.restore();
         } else {
+            // 中文項目名都唔好鏡像，全部格都淨係跟住midAngle轉，方向keep住一致
+            // （同時間輪盤果邊做法一致）。
             ctx.save();
-            const flipped = Math.cos(midAngle) < 0;
-            ctx.rotate(flipped ? midAngle + Math.PI : midAngle);
+            ctx.rotate(midAngle);
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
-            const dir = flipped ? -1 : 1;
-            // flip 咗嗰陣，呢格嘅本地「側邊」方向（垂直於半徑嗰軸）會自動倒轉埋，
-            // 所以兩直行拆開排嗰陣要將側邊偏移都倒返轉先,等兩行嘅左右次序
-            // 喺成個輪盤度keep住一致，唔會轉到嗰邊就次序亂晒。
-            const perpSign = flipped ? -1 : 1;
             const columns = wrapLabelColumns(displayLabels[i], lineHeight, maxColumnHeight);
             if (columns.length === 1) {
-                drawRotatedColumn(ctx, columns[0], textRadius, lineHeight, dir, 0);
+                drawRotatedColumn(ctx, columns[0], textRadius, lineHeight, 0);
             } else {
                 const colGap = fontSize * 1.05;
                 // 兩直行長短唔一樣嗰陣，靠個尾（最近圓心嗰邊）對齊，長嗰行就向出邊伸多啲，
@@ -1184,8 +1180,8 @@ function drawWheel(canvas, items) {
                 const innerRadius = textRadius - (maxLen - 1) * lineHeight;
                 const startRadius0 = innerRadius + (columns[0].length - 1) * lineHeight;
                 const startRadius1 = innerRadius + (columns[1].length - 1) * lineHeight;
-                drawRotatedColumn(ctx, columns[0], startRadius0, lineHeight, dir, perpSign * (-colGap / 2));
-                drawRotatedColumn(ctx, columns[1], startRadius1, lineHeight, dir, perpSign * (colGap / 2));
+                drawRotatedColumn(ctx, columns[0], startRadius0, lineHeight, -colGap / 2);
+                drawRotatedColumn(ctx, columns[1], startRadius1, lineHeight, colGap / 2);
             }
             ctx.restore();
         }
@@ -1196,10 +1192,10 @@ function drawWheel(canvas, items) {
 // 成嚿字跟住呢格嘅角度轉（同正常輪盤一樣，由圓心向邊逐隻字咁排），
 // 第一隻字最近邊、最後一隻字（個尾）最近圓心；perp 係俾兩直行拆開排嗰陣
 // 用嚟喺側邊偏移返少少（放喺呢格嘅切線方向）。
-function drawRotatedColumn(ctx, text, textRadius, lineHeight, dir, perp) {
+function drawRotatedColumn(ctx, text, textRadius, lineHeight, perp) {
     const n = text.length;
     for (let i = 0; i < n; i++) {
-        ctx.fillText(text[i], dir * (textRadius - i * lineHeight), perp);
+        ctx.fillText(text[i], textRadius - i * lineHeight, perp);
     }
 }
 
