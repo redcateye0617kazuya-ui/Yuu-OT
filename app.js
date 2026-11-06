@@ -1168,13 +1168,17 @@ function drawWheel(canvas, items) {
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
             const dir = flipped ? -1 : 1;
+            // flip 咗嗰陣，呢格嘅本地「側邊」方向（垂直於半徑嗰軸）會自動倒轉埋，
+            // 所以兩直行拆開排嗰陣要將側邊偏移都倒返轉先,等兩行嘅左右次序
+            // 喺成個輪盤度keep住一致，唔會轉到嗰邊就次序亂晒。
+            const perpSign = flipped ? -1 : 1;
             const columns = wrapLabelColumns(displayLabels[i], lineHeight, maxColumnHeight);
             if (columns.length === 1) {
                 drawRotatedColumn(ctx, columns[0], textRadius, lineHeight, dir, 0);
             } else {
                 const colGap = fontSize * 1.05;
-                drawRotatedColumn(ctx, columns[0], textRadius, lineHeight, dir, -colGap / 2);
-                drawRotatedColumn(ctx, columns[1], textRadius, lineHeight, dir, colGap / 2);
+                drawRotatedColumn(ctx, columns[0], textRadius, lineHeight, dir, perpSign * (-colGap / 2));
+                drawRotatedColumn(ctx, columns[1], textRadius, lineHeight, dir, perpSign * (colGap / 2));
             }
             ctx.restore();
         }
