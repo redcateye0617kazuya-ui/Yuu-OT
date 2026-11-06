@@ -793,6 +793,15 @@ function getWheelNewSponsorEntries(wheel) {
 function isWheelEnabled(wheel) {
     return wheel.enabled !== false;
 }
+// 判斷呢個輪盤係咪靠「抽獎機會排隊 List」嚟轉（即係有設定任何一種送機會規則）。
+// 要用返同 buildWheelBlock 顯示排隊 List 嗰陣一致嘅 entries 判斷法，先至啱新舊格式都兼容。
+function wheelHasSpinCreditRules(wheel) {
+    return getWheelAmountEntries(wheel).length > 0
+        || getWheelMembershipEntries(wheel).length > 0
+        || getWheelMilestoneEntries(wheel).length > 0
+        || getWheelNewSponsorEntries(wheel).length > 0
+        || !!wheel.spinRuleDailyEnabled;
+}
 
 // ==========================================
 // 抽獎機會：逐個輪盤自訂規則
@@ -1656,7 +1665,7 @@ function spinWheel(wheelId, btnEl) {
     const wheel = wheelsCache.find((w) => w.id === wheelId);
     if (!wheel || !wheel.items || wheel.items.length === 0) { alert("請先新增輪盤項目"); return; }
 
-    const requiresCredit = wheel.spinRuleAmountEnabled || wheel.spinRuleMembershipEnabled || wheel.spinRuleDailyEnabled;
+    const requiresCredit = wheelHasSpinCreditRules(wheel);
     if (requiresCredit) {
         const pending = (wheel.spinQueue || []).length;
         if (pending <= 0) {
@@ -1700,7 +1709,7 @@ async function applyWheelResult(wheel, chosenItem) {
         effectHours: chosenItem.effectHours,
         time: elapsedSessionTimeStr(Date.now())
     }];
-    const requiresCredit = wheel.spinRuleAmountEnabled || wheel.spinRuleMembershipEnabled || wheel.spinRuleDailyEnabled;
+    const requiresCredit = wheelHasSpinCreditRules(wheel);
     const updatePayload = { spins };
     if (requiresCredit) {
         const freshSnap = await getDoc(doc(db, "wheels", wheel.id));
