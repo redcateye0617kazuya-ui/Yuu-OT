@@ -1053,7 +1053,10 @@ function startScPolling(liveChatId, apiKey) {
     }
 
     poll();
-    scPollInterval = setInterval(poll, 10000);
+    // 由 10 秒拉疏做 30 秒：YouTube Data API 每日 quota 有限，之前個 dashboard 分頁
+    // 同 Cloudflare Worker 一齊密密 poll，試過未夠一日就爆咗 quota（quotaExceeded），
+    // 之後成日都 poll 唔到新訊息。Worker 仍然每分鐘有一份做底，拉疏咗都唔怕漏single。
+    scPollInterval = setInterval(poll, 30000);
 }
 
 function stopScPolling() {
@@ -2177,7 +2180,7 @@ window.addEventListener("DOMContentLoaded", () => {
     document.getElementById("addNoteBtn").addEventListener("click", addNote);
     document.getElementById("copyApiKeyBtn").addEventListener("click", async () => {
         try {
-            await navigator.clipboard.writeText("AIzaSyCO1i0d_c7EO4jonhTx7ylib2-xAEbLa5M");
+            await navigator.clipboard.writeText("AIzaSyCaxNa2LMNJNWy9t7ctEfAWZJIp75IrpJw");
             alert("已複製！");
         } catch (e) {
             alert("複製失敗，請手動長按選取複製。");
