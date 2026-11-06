@@ -1093,7 +1093,7 @@ function drawWheel(canvas, items) {
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
         ctx.fillStyle = "#FBF0D8";
         ctx.fill();
-        ctx.strokeStyle = "#E88FB8";
+        ctx.strokeStyle = "#A97848";
         ctx.lineWidth = 4;
         ctx.stroke();
         ctx.fillStyle = "#96897A";
@@ -1117,7 +1117,7 @@ function drawWheel(canvas, items) {
         ctx.closePath();
         ctx.fillStyle = palette[i % palette.length];
         ctx.fill();
-        ctx.strokeStyle = "#E88FB8";
+        ctx.strokeStyle = "#A97848";
         ctx.lineWidth = 4;
         ctx.stroke();
 
