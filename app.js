@@ -1126,10 +1126,23 @@ function drawWheel(canvas, items) {
         ctx.rotate(flipped ? midAngle + Math.PI : midAngle);
         ctx.textAlign = flipped ? "left" : "right";
         ctx.fillStyle = "#FFFFFF";
-        ctx.font = "bold 22px sans-serif";
         const displayLabel = item.effectHours != null ? `${item.label}h` : item.label;
-        const label = displayLabel.length > 10 ? displayLabel.slice(0, 10) + "…" : displayLabel;
-        const textRadius = r * 0.6;
+        const textRadius = r * 0.72;
+        const maxTextWidth = Math.max(26, textRadius * sliceAngle * 0.88);
+
+        let fontSize = 22;
+        ctx.font = `bold ${fontSize}px sans-serif`;
+        while (fontSize > 9 && ctx.measureText(displayLabel).width > maxTextWidth) {
+            fontSize -= 1;
+            ctx.font = `bold ${fontSize}px sans-serif`;
+        }
+        let label = displayLabel;
+        if (ctx.measureText(label).width > maxTextWidth) {
+            while (label.length > 1 && ctx.measureText(label + "…").width > maxTextWidth) {
+                label = label.slice(0, -1);
+            }
+            label += "…";
+        }
         ctx.fillText(label, flipped ? -textRadius : textRadius, 8);
         ctx.restore();
     });
@@ -1325,10 +1338,10 @@ function buildWheelBlock(wheel) {
                         <button type="button" class="add-wheel-item-btn">加</button>
                     </div>
                 </div>
-                <div class="wheel-item-list">
+                <div class="wheel-item-list${items.length > 6 ? " wheel-item-list-compact" : ""}">
                     ${items.map((it) => `
                         <div class="wheel-item-row" data-item-id="${it.id}">
-                            <span>${escapeHtml(it.label)}${it.effectHours != null ? `（${it.effectHours >= 0 ? "+" : ""}${it.effectHours}小時）` : ' <span class="no-effect-tag">（不影響時間）</span>'}</span>
+                            <span>${escapeHtml(it.label)}${it.effectHours != null ? `（${it.effectHours >= 0 ? "+" : ""}${it.effectHours}小時）` : ""}</span>
                             <button type="button" class="del-btn del-item-btn">✕</button>
                         </div>
                     `).join("")}
