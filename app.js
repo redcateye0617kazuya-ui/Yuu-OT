@@ -1105,24 +1105,25 @@ function drawWheel(canvas, items) {
 
     const palette = ["#FBF0D8", "#E8C255"];
     const sliceAngle = (Math.PI * 2) / items.length;
-    const textRadius = r * 0.72;
-    const maxTextWidth = Math.max(26, textRadius * sliceAngle * 0.88);
+    const textRadius = r * 0.68;
+    const maxColumnHeight = Math.max(30, textRadius * sliceAngle * 0.9);
     const displayLabels = items.map((it) => it.effectHours != null ? `${it.label}h` : it.label);
 
-    // 搵一個成個輪盤共用嘅字體大小：由22px開始縮，直至所有項目都可以用單行
-    // 或者拆做兩行放得落（拆兩行嘅做法好過淨係嗰個項目自己再縮細，等成個輪盤睇落大細一致）
-    ctx.save();
+    // 搵一個成個輪盤共用嘅字體大小：由22px開始縮，直至所有項目直向排都放得落
+    // （一直行放唔落就拆做兩直行排埋一齊，好過淨係嗰個項目自己再縮細，等成個輪盤睇落大細一致）
     let fontSize = 22;
     for (; fontSize > 10; fontSize--) {
-        ctx.font = `bold ${fontSize}px sans-serif`;
-        const allFit = displayLabels.every((lbl) => fitsOneOrTwoLines(ctx, lbl, maxTextWidth));
+        const lineHeight = fontSize * 1.05;
+        const allFit = displayLabels.every((lbl) => fitsOneOrTwoColumns(lbl, lineHeight, maxColumnHeight));
         if (allFit) break;
     }
-    ctx.font = `bold ${fontSize}px sans-serif`;
-    ctx.restore();
+    const lineHeight = fontSize * 1.05;
 
     ctx.save();
     ctx.translate(cx, cy);
+    ctx.font = `bold ${fontSize}px sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
     items.forEach((item, i) => {
         const start = i * sliceAngle;
         const end = start + sliceAngle;
@@ -1136,53 +1137,46 @@ function drawWheel(canvas, items) {
         ctx.lineWidth = 2;
         ctx.stroke();
 
-        ctx.save();
         const midAngle = start + sliceAngle / 2;
-        const flipped = Math.cos(midAngle) < 0;
-        ctx.rotate(flipped ? midAngle + Math.PI : midAngle);
-        ctx.textAlign = flipped ? "left" : "right";
+        const px = textRadius * Math.cos(midAngle);
+        const py = textRadius * Math.sin(midAngle);
         ctx.fillStyle = "#2B2320";
-        ctx.font = `bold ${fontSize}px sans-serif`;
 
-        const lines = wrapLabelLines(ctx, displayLabels[i], maxTextWidth);
-        const x = flipped ? -textRadius : textRadius;
-        if (lines.length === 1) {
-            ctx.fillText(lines[0], x, 8);
+        const columns = wrapLabelColumns(displayLabels[i], lineHeight, maxColumnHeight);
+        if (columns.length === 1) {
+            drawVerticalColumn(ctx, columns[0], px, py, lineHeight);
         } else {
-            ctx.fillText(lines[0], x, 8 - fontSize * 0.55);
-            ctx.fillText(lines[1], x, 8 + fontSize * 0.55);
+            const colGap = fontSize * 1.05;
+            drawVerticalColumn(ctx, columns[0], px - colGap / 2, py, lineHeight);
+            drawVerticalColumn(ctx, columns[1], px + colGap / 2, py, lineHeight);
         }
-        ctx.restore();
     });
     ctx.restore();
 }
 
-// 將項目名試下拆做兩行，每行都要放得入 maxWidth，搵最近中間嘅斷字位；
-// 真係太長就淨係截斷加「…」做保底。
-function wrapLabelLines(ctx, text, maxWidth) {
-    if (ctx.measureText(text).width <= maxWidth) return [text];
-    let bestCut = null;
-    for (let cut = 1; cut < text.length; cut++) {
-        const a = text.slice(0, cut), b = text.slice(cut);
-        if (ctx.measureText(a).width <= maxWidth && ctx.measureText(b).width <= maxWidth) {
-            if (bestCut === null || Math.abs(cut - text.length / 2) < Math.abs(bestCut - text.length / 2)) bestCut = cut;
-        }
+// 每個字分開一粒粒咁由上到下直向排，唔會轉動（跟住個輪盤嗰格轉向），
+// 保持成粒字企直，同參考圖嗰種直書風格一致。
+function drawVerticalColumn(ctx, text, x, y, lineHeight) {
+    const n = text.length;
+    for (let i = 0; i < n; i++) {
+        ctx.fillText(text[i], x, y + (i - (n - 1) / 2) * lineHeight);
     }
-    if (bestCut !== null) return [text.slice(0, bestCut), text.slice(bestCut)];
-    const truncate = (s) => {
-        while (s.length > 1 && ctx.measureText(s + "…").width > maxWidth) s = s.slice(0, -1);
-        return s + "…";
-    };
+}
+
+// 將項目名試下拆做兩直行排埋一齊，每行字數都要放得落 maxHeight；
+// 真係太長就淨係截斷加「…」做保底。
+function wrapLabelColumns(text, lineHeight, maxHeight) {
+    const maxChars = Math.max(1, Math.floor(maxHeight / lineHeight));
+    if (text.length <= maxChars) return [text];
     const mid = Math.ceil(text.length / 2);
+    const truncate = (s) => s.length <= maxChars ? s : s.slice(0, Math.max(1, maxChars - 1)) + "…";
     return [truncate(text.slice(0, mid)), truncate(text.slice(mid))];
 }
 
-function fitsOneOrTwoLines(ctx, text, maxWidth) {
-    if (ctx.measureText(text).width <= maxWidth) return true;
-    for (let cut = 1; cut < text.length; cut++) {
-        if (ctx.measureText(text.slice(0, cut)).width <= maxWidth && ctx.measureText(text.slice(cut)).width <= maxWidth) return true;
-    }
-    return false;
+function fitsOneOrTwoColumns(text, lineHeight, maxHeight) {
+    const maxChars = Math.max(1, Math.floor(maxHeight / lineHeight));
+    if (text.length <= maxChars) return true;
+    return Math.ceil(text.length / 2) <= maxChars;
 }
 
 function renderWheels() {
