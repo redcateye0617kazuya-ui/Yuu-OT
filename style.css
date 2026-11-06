@@ -363,7 +363,7 @@ body {
 .session-table th { text-align: left; color: var(--text-muted); padding: 6px 6px; border-bottom: 1px solid var(--border-soft); }
 .session-table td { padding: 6px 6px; border-bottom: 1px solid var(--border-soft); color: var(--text-dark); }
 .session-table td:last-child { width: 32px; padding: 6px 2px; }
-.session-table .edit-btn { width: 24px; height: 24px; font-size: 11px; }
+.session-table .edit-btn, .session-table .del-btn { width: 24px; height: 24px; font-size: 11px; }
 
 @media (max-width: 960px) {
     body { padding: 0; }
