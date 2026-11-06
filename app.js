@@ -1105,8 +1105,8 @@ function drawWheel(canvas, items) {
 
     const palette = ["#FBF0D8", "#5C9E85"];
     const sliceAngle = (Math.PI * 2) / items.length;
-    const textRadius = r * 0.7;
-    const maxTextWidth = Math.max(26, textRadius * sliceAngle * 0.88);
+    const textRadius = r * 0.78;
+    const maxTextWidth = Math.max(26, textRadius * sliceAngle * 0.98);
     const displayLabels = items.map((it) => it.effectHours != null ? `${it.label}h` : it.label);
 
     // 搵一個成個輪盤共用嘅字體大小：優先揀一個全部項目都放得落單行嘅size，
