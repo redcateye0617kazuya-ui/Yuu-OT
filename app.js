@@ -1091,9 +1091,9 @@ function drawWheel(canvas, items) {
     if (!items || items.length === 0) {
         ctx.beginPath();
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
-        ctx.fillStyle = "#FBF5EE";
+        ctx.fillStyle = "#FBF0D8";
         ctx.fill();
-        ctx.strokeStyle = "#EEE1D0";
+        ctx.strokeStyle = "#E88FB8";
         ctx.stroke();
         ctx.fillStyle = "#96897A";
         ctx.font = "12px sans-serif";
@@ -1102,7 +1102,7 @@ function drawWheel(canvas, items) {
         return;
     }
 
-    const palette = ["#5C9E85", "#C9A76B", "#1F2F3D", "#B9AD98", "#C15B45", "#7C93A0", "#3F7A64", "#8D5B7C"];
+    const palette = ["#FBF0D8", "#E8C255"];
     const sliceAngle = (Math.PI * 2) / items.length;
 
     ctx.save();
@@ -1116,7 +1116,7 @@ function drawWheel(canvas, items) {
         ctx.closePath();
         ctx.fillStyle = palette[i % palette.length];
         ctx.fill();
-        ctx.strokeStyle = "#FFFFFF";
+        ctx.strokeStyle = "#E88FB8";
         ctx.lineWidth = 2;
         ctx.stroke();
 
@@ -1125,7 +1125,7 @@ function drawWheel(canvas, items) {
         const flipped = Math.cos(midAngle) < 0;
         ctx.rotate(flipped ? midAngle + Math.PI : midAngle);
         ctx.textAlign = flipped ? "left" : "right";
-        ctx.fillStyle = "#FFFFFF";
+        ctx.fillStyle = "#2B2320";
         const displayLabel = item.effectHours != null ? `${item.label}h` : item.label;
         const textRadius = r * 0.72;
         const maxTextWidth = Math.max(26, textRadius * sliceAngle * 0.88);
