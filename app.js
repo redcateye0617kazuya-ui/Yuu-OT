@@ -1103,13 +1103,7 @@ function drawWheel(canvas, items) {
         return;
     }
 
-    const palette = ["#FBF0D8", "#E8C255", "#C98A3E"];
-    // 兩色梅花間竹咁隔住嚟，但係單數格嘅話個頭同個尾色塊會撞埋一齊，
-    // 破壞咗間隔；呢種情況下將最後一格換做第三隻色，等佢同前後都唔撞色。
-    const sliceColors = items.map((_, i) => i % 2);
-    if (items.length > 2 && items.length % 2 === 1) {
-        sliceColors[items.length - 1] = 2;
-    }
+    const palette = ["#FBF0D8", "#E8C255"];
     const sliceAngle = (Math.PI * 2) / items.length;
     const textRadius = r * 0.7;
     const maxTextWidth = Math.max(26, textRadius * sliceAngle * 0.88);
@@ -1142,7 +1136,7 @@ function drawWheel(canvas, items) {
         ctx.moveTo(0, 0);
         ctx.arc(0, 0, r, start, end);
         ctx.closePath();
-        ctx.fillStyle = palette[sliceColors[i]];
+        ctx.fillStyle = palette[i % palette.length];
         ctx.fill();
         ctx.strokeStyle = "#A97848";
         ctx.lineWidth = 2;
