@@ -1093,7 +1093,7 @@ function drawWheel(canvas, items) {
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
         ctx.fillStyle = "#FBF0D8";
         ctx.fill();
-        ctx.strokeStyle = "#A97848";
+        ctx.strokeStyle = "#9A9A9A";
         ctx.lineWidth = 2;
         ctx.stroke();
         ctx.fillStyle = "#96897A";
@@ -1103,7 +1103,7 @@ function drawWheel(canvas, items) {
         return;
     }
 
-    const palette = ["#FBF0D8", "#E8C255"];
+    const palette = ["#FBF0D8", "#5C9E85"];
     const sliceAngle = (Math.PI * 2) / items.length;
     const textRadius = r * 0.7;
     const maxTextWidth = Math.max(26, textRadius * sliceAngle * 0.88);
@@ -1138,7 +1138,7 @@ function drawWheel(canvas, items) {
         ctx.closePath();
         ctx.fillStyle = palette[i % palette.length];
         ctx.fill();
-        ctx.strokeStyle = "#A97848";
+        ctx.strokeStyle = "#9A9A9A";
         ctx.lineWidth = 2;
         ctx.stroke();
 
