@@ -1550,7 +1550,7 @@ async function addWheelItem(wheelId, blockEl) {
     let label, effectHours = null;
     if (affectsCheckbox.checked) {
         const hrs = parseFloat(hoursInput.value);
-        if (isNaN(hrs) || hrs === 0) { alert("請輸入有效嘅小時數（可以用 － / ＋ 調整）"); return; }
+        if (isNaN(hrs)) { alert("請輸入有效嘅小時數（可以用 － / ＋ 調整）"); return; }
         effectHours = hrs;
         label = `${hrs >= 0 ? "+" : ""}${hrs}`;
     } else {
