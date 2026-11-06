@@ -357,7 +357,7 @@ function renderLeaderboard(containerId, list) {
         container.innerHTML = '<div class="empty-hint">暫時未有紀錄</div>';
         return;
     }
-    const sorted = [...list].sort((a, b) => b.amount - a.amount);
+    const sorted = [...list].sort((a, b) => b.amount - a.amount).slice(0, 30);
     const rankColors = ["teal", "gold", "slate", "navy", "taupe"];
     container.innerHTML = sorted.map((entry, i) => `
         <div class="leaderboard-row">
