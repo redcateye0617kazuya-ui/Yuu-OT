@@ -1177,8 +1177,14 @@ function drawWheel(canvas, items) {
                 drawRotatedColumn(ctx, columns[0], textRadius, lineHeight, dir, 0);
             } else {
                 const colGap = fontSize * 1.05;
-                drawRotatedColumn(ctx, columns[0], textRadius, lineHeight, dir, perpSign * (-colGap / 2));
-                drawRotatedColumn(ctx, columns[1], textRadius, lineHeight, dir, perpSign * (colGap / 2));
+                // 兩直行長短唔一樣嗰陣，靠個尾（最近圓心嗰邊）對齊，長嗰行就向出邊伸多啲，
+                // 唔好淨係兩行都由出邊對齊，等短行個尾吊喺中間唔靚。
+                const maxLen = Math.max(columns[0].length, columns[1].length);
+                const innerRadius = textRadius - (maxLen - 1) * lineHeight;
+                const startRadius0 = innerRadius + (columns[0].length - 1) * lineHeight;
+                const startRadius1 = innerRadius + (columns[1].length - 1) * lineHeight;
+                drawRotatedColumn(ctx, columns[0], startRadius0, lineHeight, dir, perpSign * (-colGap / 2));
+                drawRotatedColumn(ctx, columns[1], startRadius1, lineHeight, dir, perpSign * (colGap / 2));
             }
             ctx.restore();
         }
