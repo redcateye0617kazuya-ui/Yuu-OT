@@ -269,8 +269,9 @@ body {
 .toggle-switch input:checked + .toggle-slider { background: var(--teal); }
 .toggle-switch input:checked + .toggle-slider::before { transform: translateX(18px); }
 .del-wheel-btn {
-    background: var(--danger-soft); color: var(--danger); border: none; border-radius: 0; width: 28px; height: 28px;
-    cursor: pointer; font-weight: 700; flex-shrink: 0; font-size: 13px; padding: 0;
+    position: absolute; top: -10px; left: -10px; z-index: 2;
+    background: var(--danger-soft); color: var(--danger); border: none; border-radius: 50%; width: 22px; height: 22px;
+    cursor: pointer; font-weight: 700; font-size: 12px; padding: 0; box-shadow: var(--shadow-soft);
 }
 .wheel-rules-section { margin-bottom: 14px; }
 .wheel-rules-header {

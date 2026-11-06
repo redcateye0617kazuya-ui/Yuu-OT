@@ -1239,6 +1239,7 @@ function buildWheelBlock(wheel) {
     const isListMode = wheel.mode === "list";
 
     block.innerHTML = `
+        <button type="button" class="del-wheel-btn" title="刪除輪盤">✕</button>
         <div class="wheel-block-header">
             <span class="wheel-drag-handle" title="拖曳排序">⠿</span>
             <input type="text" class="wheel-name-input" value="${escapeHtml(wheel.name || "")}">
@@ -1250,7 +1251,6 @@ function buildWheelBlock(wheel) {
                 <input type="checkbox" class="wheel-enabled-cb" ${wheel.enabled !== false ? "checked" : ""}>
                 <span class="toggle-slider"></span>
             </label>
-            <button type="button" class="del-wheel-btn" title="刪除輪盤">✕</button>
         </div>
         <div class="wheel-rules-section">
             <div class="wheel-rules-header">
