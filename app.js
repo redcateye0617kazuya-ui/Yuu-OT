@@ -1053,7 +1053,10 @@ function startScPolling(liveChatId, apiKey) {
     }
 
     poll();
-    scPollInterval = setInterval(poll, 10000);
+    // 由 10 秒拉疏做 30 秒：YouTube Data API 每日 quota 有限，之前個 dashboard 分頁
+    // 同 Cloudflare Worker 一齊密密 poll，試過未夠一日就爆咗 quota（quotaExceeded），
+    // 之後成日都 poll 唔到新訊息。Worker 仍然每分鐘有一份做底，拉疏咗都唔怕漏single。
+    scPollInterval = setInterval(poll, 30000);
 }
 
 function stopScPolling() {
