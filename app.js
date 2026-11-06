@@ -1094,6 +1094,7 @@ function drawWheel(canvas, items) {
         ctx.fillStyle = "#FBF0D8";
         ctx.fill();
         ctx.strokeStyle = "#E88FB8";
+        ctx.lineWidth = 4;
         ctx.stroke();
         ctx.fillStyle = "#96897A";
         ctx.font = "12px sans-serif";
@@ -1117,7 +1118,7 @@ function drawWheel(canvas, items) {
         ctx.fillStyle = palette[i % palette.length];
         ctx.fill();
         ctx.strokeStyle = "#E88FB8";
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 4;
         ctx.stroke();
 
         ctx.save();
