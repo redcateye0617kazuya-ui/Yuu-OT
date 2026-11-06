@@ -1094,7 +1094,7 @@ function drawWheel(canvas, items) {
         ctx.fillStyle = "#FBF0D8";
         ctx.fill();
         ctx.strokeStyle = "#A97848";
-        ctx.lineWidth = 4;
+        ctx.lineWidth = 2;
         ctx.stroke();
         ctx.fillStyle = "#96897A";
         ctx.font = "12px sans-serif";
@@ -1105,6 +1105,21 @@ function drawWheel(canvas, items) {
 
     const palette = ["#FBF0D8", "#E8C255"];
     const sliceAngle = (Math.PI * 2) / items.length;
+    const textRadius = r * 0.72;
+    const maxTextWidth = Math.max(26, textRadius * sliceAngle * 0.88);
+    const displayLabels = items.map((it) => it.effectHours != null ? `${it.label}h` : it.label);
+
+    // 搵一個成個輪盤共用嘅字體大小：由22px開始縮，直至所有項目都可以用單行
+    // 或者拆做兩行放得落（拆兩行嘅做法好過淨係嗰個項目自己再縮細，等成個輪盤睇落大細一致）
+    ctx.save();
+    let fontSize = 22;
+    for (; fontSize > 10; fontSize--) {
+        ctx.font = `bold ${fontSize}px sans-serif`;
+        const allFit = displayLabels.every((lbl) => fitsOneOrTwoLines(ctx, lbl, maxTextWidth));
+        if (allFit) break;
+    }
+    ctx.font = `bold ${fontSize}px sans-serif`;
+    ctx.restore();
 
     ctx.save();
     ctx.translate(cx, cy);
@@ -1118,7 +1133,7 @@ function drawWheel(canvas, items) {
         ctx.fillStyle = palette[i % palette.length];
         ctx.fill();
         ctx.strokeStyle = "#A97848";
-        ctx.lineWidth = 4;
+        ctx.lineWidth = 2;
         ctx.stroke();
 
         ctx.save();
@@ -1127,27 +1142,47 @@ function drawWheel(canvas, items) {
         ctx.rotate(flipped ? midAngle + Math.PI : midAngle);
         ctx.textAlign = flipped ? "left" : "right";
         ctx.fillStyle = "#2B2320";
-        const displayLabel = item.effectHours != null ? `${item.label}h` : item.label;
-        const textRadius = r * 0.72;
-        const maxTextWidth = Math.max(26, textRadius * sliceAngle * 0.88);
-
-        let fontSize = 22;
         ctx.font = `bold ${fontSize}px sans-serif`;
-        while (fontSize > 9 && ctx.measureText(displayLabel).width > maxTextWidth) {
-            fontSize -= 1;
-            ctx.font = `bold ${fontSize}px sans-serif`;
+
+        const lines = wrapLabelLines(ctx, displayLabels[i], maxTextWidth);
+        const x = flipped ? -textRadius : textRadius;
+        if (lines.length === 1) {
+            ctx.fillText(lines[0], x, 8);
+        } else {
+            ctx.fillText(lines[0], x, 8 - fontSize * 0.55);
+            ctx.fillText(lines[1], x, 8 + fontSize * 0.55);
         }
-        let label = displayLabel;
-        if (ctx.measureText(label).width > maxTextWidth) {
-            while (label.length > 1 && ctx.measureText(label + "…").width > maxTextWidth) {
-                label = label.slice(0, -1);
-            }
-            label += "…";
-        }
-        ctx.fillText(label, flipped ? -textRadius : textRadius, 8);
         ctx.restore();
     });
     ctx.restore();
+}
+
+// 將項目名試下拆做兩行，每行都要放得入 maxWidth，搵最近中間嘅斷字位；
+// 真係太長就淨係截斷加「…」做保底。
+function wrapLabelLines(ctx, text, maxWidth) {
+    if (ctx.measureText(text).width <= maxWidth) return [text];
+    let bestCut = null;
+    for (let cut = 1; cut < text.length; cut++) {
+        const a = text.slice(0, cut), b = text.slice(cut);
+        if (ctx.measureText(a).width <= maxWidth && ctx.measureText(b).width <= maxWidth) {
+            if (bestCut === null || Math.abs(cut - text.length / 2) < Math.abs(bestCut - text.length / 2)) bestCut = cut;
+        }
+    }
+    if (bestCut !== null) return [text.slice(0, bestCut), text.slice(bestCut)];
+    const truncate = (s) => {
+        while (s.length > 1 && ctx.measureText(s + "…").width > maxWidth) s = s.slice(0, -1);
+        return s + "…";
+    };
+    const mid = Math.ceil(text.length / 2);
+    return [truncate(text.slice(0, mid)), truncate(text.slice(mid))];
+}
+
+function fitsOneOrTwoLines(ctx, text, maxWidth) {
+    if (ctx.measureText(text).width <= maxWidth) return true;
+    for (let cut = 1; cut < text.length; cut++) {
+        if (ctx.measureText(text.slice(0, cut)).width <= maxWidth && ctx.measureText(text.slice(cut)).width <= maxWidth) return true;
+    }
+    return false;
 }
 
 function renderWheels() {
