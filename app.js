@@ -357,7 +357,7 @@ function renderLeaderboard(containerId, list) {
         container.innerHTML = '<div class="empty-hint">暫時未有紀錄</div>';
         return;
     }
-    const sorted = [...list].sort((a, b) => b.amount - a.amount);
+    const sorted = [...list].sort((a, b) => b.amount - a.amount).slice(0, 30);
     const rankColors = ["teal", "gold", "slate", "navy", "taupe"];
     container.innerHTML = sorted.map((entry, i) => `
         <div class="leaderboard-row">
@@ -657,6 +657,9 @@ async function softResetCampaign() {
 // 課金（SuperChat / PayMe）寫入 + 規則引擎重算
 // ==========================================
 async function addContributionAndRecalc({ isSuperChat, id, name, amount, eventTimeMs, message, originalAmount, originalCurrency }) {
+    // 加鐘規則就算喺同一個 transaction 入面都要攞最新鮮嘅，唔可以淨係靠本地 rulesCache
+    // （詳見 getFreshRules 嘅註解），所以喺起 transaction 之前先讀一次。
+    const rules = await getFreshRules();
     // 用 transaction 嚟讀+寫，避免同一時間有第二個來源（例如 Cloudflare Worker 補漏程式）
     // 都喺度讀緊同一份文件，令大家各自基於舊版本算完之後互相覆蓋，靜靜雞漏咗筆數。
     const added = await runTransaction(db, async (transaction) => {
@@ -685,7 +688,7 @@ async function addContributionAndRecalc({ isSuperChat, id, name, amount, eventTi
 
         const newTotal = (data.totalAmount || 0) + amount;
         const newEffectiveAmount = getBonusEffectiveBase(data) + amount * getBonusMultiplier(data);
-        const newBonusMs = computeBonusMs(newEffectiveAmount, rulesCache);
+        const newBonusMs = computeBonusMs(newEffectiveAmount, rules);
         const oldBonusMs = data.bonusMsGranted || 0;
         const deltaMs = newBonusMs - oldBonusMs;
 
@@ -714,6 +717,7 @@ async function deleteCurrentSessionPaymeEvent(eventId) {
 
     if (!confirm(`確定要刪除「${currentEvent.name}」呢筆 $HKD ${(parseFloat(currentEvent.amount) || 0).toLocaleString()} 嘅 PayMe 記錄？`)) return;
 
+    const rules = await getFreshRules();
     await runTransaction(db, async (transaction) => {
         const freshSnap = await transaction.get(campaignRef);
         if (!freshSnap.exists()) return;
@@ -733,7 +737,7 @@ async function deleteCurrentSessionPaymeEvent(eventId) {
 
         const newTotal = Math.max(0, (data.totalAmount || 0) + delta);
         const newEffectiveAmount = Math.max(0, getBonusEffectiveBase(data) + delta * getBonusMultiplier(data));
-        const newBonusMs = computeBonusMs(newEffectiveAmount, rulesCache);
+        const newBonusMs = computeBonusMs(newEffectiveAmount, rules);
         const deltaMs = newBonusMs - (data.bonusMsGranted || 0);
 
         const updatePayload = {
@@ -1089,12 +1093,22 @@ function renderRuleList() {
     });
 }
 
+// 用嚟喺計加鐘嗰刻即時由 Firestore 攞返最新嘅規則，唔好淨係靠本地 rulesCache——
+// rulesCache 淨係由 onSnapshot 監聽被動更新，啱啱改完規則嗰一刻有可能仲未同步到，
+// 攞住舊/未完整嘅規則去重新計算就會令加鐘時數錯誤咁跳動（例如突然跳走幾十個鐘，
+// 跟住下一筆課金入嚟又用返啱嘅規則計一次，睇落好似自己「彈返去」）。
+async function getFreshRules() {
+    const qs = await getDocs(query(rulesColRef, orderBy("minAmount")));
+    return qs.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
 async function reapplyRulesToCampaign() {
     const snap = await getDoc(campaignRef);
     if (!snap.exists()) return;
     const data = snap.data();
     if (!data.status || data.status === "idle") return;
-    const newBonusMs = computeBonusMs(getBonusEffectiveBase(data), rulesCache);
+    const rules = await getFreshRules();
+    const newBonusMs = computeBonusMs(getBonusEffectiveBase(data), rules);
     const deltaMs = newBonusMs - (data.bonusMsGranted || 0);
     if (deltaMs === 0) return;
     const updatePayload = { bonusMsGranted: newBonusMs };
@@ -1876,6 +1890,7 @@ async function editArchivedScAmount(sessionId, eventId) {
     const newAmount = parseFloat(input);
     if (isNaN(newAmount) || newAmount < 0) { alert("請輸入有效金額"); return; }
 
+    const rules = await getFreshRules();
     const updated = await runTransaction(db, async (transaction) => {
         const freshSessionSnap = await transaction.get(sessionRef);
         const freshCampaignSnap = await transaction.get(campaignRef);
@@ -1903,7 +1918,7 @@ async function editArchivedScAmount(sessionId, eventId) {
 
         const newTotal = Math.max(0, (campaignData.totalAmount || 0) + delta);
         const newEffectiveAmount = Math.max(0, getBonusEffectiveBase(campaignData) + delta * getBonusMultiplier(campaignData));
-        const newBonusMs = computeBonusMs(newEffectiveAmount, rulesCache);
+        const newBonusMs = computeBonusMs(newEffectiveAmount, rules);
         const deltaMs = newBonusMs - (campaignData.bonusMsGranted || 0);
 
         const campaignUpdatePayload = {
@@ -1935,6 +1950,7 @@ async function deleteArchivedPaymeEvent(sessionId, eventId) {
 
     if (!confirm(`確定要刪除「${currentEvent.name}」呢筆 $HKD ${(parseFloat(currentEvent.amount) || 0).toLocaleString()} 嘅 PayMe 記錄？`)) return;
 
+    const rules = await getFreshRules();
     const updated = await runTransaction(db, async (transaction) => {
         const freshSessionSnap = await transaction.get(sessionRef);
         const freshCampaignSnap = await transaction.get(campaignRef);
@@ -1959,7 +1975,7 @@ async function deleteArchivedPaymeEvent(sessionId, eventId) {
 
         const newTotal = Math.max(0, (campaignData.totalAmount || 0) + delta);
         const newEffectiveAmount = Math.max(0, getBonusEffectiveBase(campaignData) + delta * getBonusMultiplier(campaignData));
-        const newBonusMs = computeBonusMs(newEffectiveAmount, rulesCache);
+        const newBonusMs = computeBonusMs(newEffectiveAmount, rules);
         const deltaMs = newBonusMs - (campaignData.bonusMsGranted || 0);
 
         const campaignUpdatePayload = {
@@ -1993,6 +2009,7 @@ async function editArchivedScTotal(sessionId) {
     const newTotal = parseFloat(input);
     if (isNaN(newTotal) || newTotal < 0) { alert("請輸入有效金額"); return; }
 
+    const rules = await getFreshRules();
     const updated = await runTransaction(db, async (transaction) => {
         const freshSessionSnap = await transaction.get(sessionRef);
         const freshCampaignSnap = await transaction.get(campaignRef);
@@ -2007,7 +2024,7 @@ async function editArchivedScTotal(sessionId) {
         const campaignData = freshCampaignSnap.data();
         const newCampaignTotal = Math.max(0, (campaignData.totalAmount || 0) + delta);
         const newEffectiveAmount = Math.max(0, getBonusEffectiveBase(campaignData) + delta * getBonusMultiplier(campaignData));
-        const newBonusMs = computeBonusMs(newEffectiveAmount, rulesCache);
+        const newBonusMs = computeBonusMs(newEffectiveAmount, rules);
         const deltaMs = newBonusMs - (campaignData.bonusMsGranted || 0);
 
         const campaignUpdatePayload = {
