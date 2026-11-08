@@ -562,6 +562,15 @@ export default {
         ctx.waitUntil(pollSuperChat(env).catch((e) => console.error("Poll 出錯：", e)));
     },
     async fetch(request, env, ctx) {
+        // 瀏覽器開呢個網址做手動測試嗰陣，會自動額外發多一個 /favicon.ico 請求，
+        // 如果冇呢個路徑判斷，兩個請求都會各自觸發一次完整 poll，幾乎同一時間
+        // 連環打 YouTube API，撞到 rateLimitExceeded（亦都令任何打呢個公開網址
+        // 嘅第三方流量都可以觸發額外 poll，白白浪費 quota）。而家淨係根目錄
+        // 先會真正觸發 poll，其他路徑（包括 /favicon.ico）即刻回應，唔會打 YouTube API。
+        const url = new URL(request.url);
+        if (url.pathname !== "/") {
+            return new Response("Not found", { status: 404 });
+        }
         try {
             await pollSuperChat(env);
             return new Response("OK - 已經執行完一次 poll，睇 Cloudflare Dashboard 嘅 Logs 睇詳細結果。");
