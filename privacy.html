@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>隱私權政策 | YUU又又又OT Dashboard</title>
+    <style>
+        :root {
+            --panel-bg: #FFFFFF;
+            --text-dark: #23282D;
+            --text-muted: #6B6B6B;
+            --border-soft: #E7E2D8;
+            --navy: #1F2F3D;
+            --navy-soft: #E4E9ED;
+            --teal: #5C9E85;
+            --teal-soft: #E1EEE7;
+            --bg: #FBFAF7;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0; padding: 24px; background: var(--bg); color: var(--text-dark);
+            font-family: "Inter", "Noto Sans TC", -apple-system, BlinkMacSystemFont, sans-serif;
+            line-height: 1.7;
+        }
+        .page { max-width: 760px; margin: 0 auto; background: var(--panel-bg); border: 1px solid var(--border-soft); padding: 32px 36px 44px; }
+        h1 { font-size: 24px; margin: 0 0 6px; color: var(--navy); }
+        .updated { color: var(--text-muted); font-size: 13px; margin-bottom: 28px; }
+        h2 { font-size: 17px; color: var(--navy); border-left: 4px solid var(--teal); padding-left: 10px; margin: 32px 0 10px; }
+        p, li { font-size: 14.5px; color: var(--text-dark); }
+        ul { padding-left: 20px; margin: 8px 0; }
+        li { margin-bottom: 6px; }
+        .note-box { background: var(--teal-soft); border: 1px solid var(--border-soft); padding: 14px 16px; font-size: 14px; margin: 14px 0; }
+        a { color: var(--teal); }
+        .back { display: inline-block; margin-bottom: 20px; font-size: 13px; color: var(--text-muted); text-decoration: none; }
+        .back:hover { color: var(--navy); }
+        footer { margin-top: 36px; padding-top: 16px; border-top: 1px solid var(--border-soft); font-size: 12.5px; color: var(--text-muted); }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <a class="back" href="index.html">← 返回 Dashboard</a>
+        <h1>隱私權政策</h1>
+        <div class="updated">最後更新日期：2026 年 11 月</div>
+
+        <p>呢個網站（下稱「本網站」／「本 Dashboard」）係一個非商業性質嘅個人工具，用嚟記錄同顯示一個 YouTube 直播加班馬拉松活動入面嘅課金（SuperChat／PayMe）、送會員、留言板留言等資訊，俾參與活動嘅直播觀眾同台主本人使用。本頁解釋本網站會收集咩資料、點樣使用、同埋點樣保護呢啲資料。</p>
+
+        <h2>我哋收集嘅資料</h2>
+        <ul>
+            <li><strong>YouTube 直播聊天室資料</strong>（透過 YouTube Data API 讀取）：SuperChat 課金嘅顯示名稱、金額、留言內容；送會員、會員里程碑留言、新／升級會員事件嘅顯示名稱同相關資訊。呢啲資料本身已經係 YouTube 直播聊天室入面公開可見嘅內容。</li>
+            <li><strong>人手輸入資料</strong>：PayMe 課金嘅用戶名同金額，由直播操作者人手輸入（因為 PayMe 冇公開 API）。</li>
+            <li><strong>留言板留言</strong>：觀眾自願喺本網站留言板輸入嘅暱稱同留言文字。</li>
+        </ul>
+        <p>本網站<strong>唔會</strong>收集密碼、付款卡資料、地址等敏感個人資料，亦都冇用戶登入系統。</p>
+
+        <h2>點樣使用呢啲資料</h2>
+        <ul>
+            <li>計算同顯示本場／全馬拉松累積課金總額</li>
+            <li>顯示金主榜（捐款排行榜）</li>
+            <li>根據預先設定嘅規則計算加班／加鐘時數</li>
+            <li>喺直播記錄（Record）頁面保留每場直播嘅課金明細，方便覆查</li>
+        </ul>
+        <p>呢個 Dashboard 本身就係直播活動公開展示嘅一部分，上述資料（例如金主榜、課金記錄）會<strong>公開顯示</strong>俾所有訪問本網站嘅人睇到，性質上同直播聊天室入面本身已經公開嘅課金訊息相若。</p>
+
+        <h2>資料儲存</h2>
+        <p>本網站用 Google Firebase（Firestore）作為資料儲存後台，資料儲存喺 Google 嘅伺服器上。本網站冇將資料提供俾上述以外嘅第三方作廣告或其他商業用途。</p>
+
+        <h2>資料刪除要求</h2>
+        <p>如果你出現喺本網站嘅記錄入面（例如你嘅 SuperChat／PayMe／留言），而想要求刪除你嘅資料，歡迎透過直播留言、留言板，或者直接私訊台主所屬嘅 YouTube 頻道提出，台主會盡快處理。</p>
+
+        <h2>YouTube API Services 聲明</h2>
+        <div class="note-box">
+            本網站使用 YouTube API Services（<a href="https://www.youtube.com/t/terms" target="_blank" rel="noopener">YouTube 服務條款</a>）。繼續使用本網站涉及 YouTube API 嘅功能，即代表你同意受 YouTube 服務條款約束。你亦可以參閱
+            <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google 隱私權政策</a> 以了解 Google 點樣處理資料。
+        </div>
+
+        <h2>政策嘅更新</h2>
+        <p>本政策日後如有重大改動，會喺呢頁更新並調整上面「最後更新日期」。</p>
+
+        <footer>YUU又又又OT Dashboard · 本頁為非商業性質個人直播活動工具嘅隱私權說明</footer>
+    </div>
+</body>
+</html>
