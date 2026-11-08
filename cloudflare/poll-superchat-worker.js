@@ -166,6 +166,28 @@ function formatMs(ms) {
     return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
+// 同 app.js 嘅 fetchLiveChatId 一樣嘅邏輯：換 Link 嗰刻如果條片仲未真正開始
+// 直播，YouTube 會攞唔到 activeLiveChatId，令個 session 冇得自動 poll。
+// pollSuperChat 入面每次見到 session 冇 liveChatId 都會再試一次呢個 function，
+// 攞到就寫返落 Firestore，等下一個 cron cycle 開始正常 poll。
+async function resolveLiveChatId(videoId, apiKey) {
+    try {
+        const url = `https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails&id=${videoId}&key=${apiKey}`;
+        const res = await fetch(url);
+        const data = await res.json();
+        if (data.error) {
+            console.error("攞 liveChatId 時 YouTube API 錯誤:", data.error.message);
+            return null;
+        }
+        if (data.items && data.items.length > 0) {
+            return data.items[0].liveStreamingDetails?.activeLiveChatId || null;
+        }
+    } catch (e) {
+        console.error("攞 liveChatId 網絡異常:", e.message);
+    }
+    return null;
+}
+
 function computeBonusMs(totalAmount, rules) {
     if (!rules || rules.length === 0 || totalAmount <= 0) return 0;
     const sorted = [...rules].sort((a, b) => a.minAmount - b.minAmount);
@@ -311,8 +333,26 @@ async function pollSuperChat(env) {
         return;
     }
     const session = first.data.currentSession;
-    if (!session || !session.active || !session.liveChatId || !first.data.ytApiKey) {
-        console.log("而家冇進行緊嘅直播 Session，或者未有 liveChatId／API Key，跳過。");
+    if (!session || !session.active || !first.data.ytApiKey) {
+        console.log("而家冇進行緊嘅直播 Session，或者未有 API Key，跳過。");
+        return;
+    }
+    if (!session.liveChatId) {
+        if (!session.videoId) {
+            console.log("呢個 session 冇 videoId，跳過。");
+            return;
+        }
+        const resolvedId = await resolveLiveChatId(session.videoId, first.data.ytApiKey);
+        if (!resolvedId) {
+            console.log("直播可能仲未真正開始，攞唔到 liveChatId，等下個 cron cycle 再試。");
+            return;
+        }
+        try {
+            await fsPatchDoc(token, "campaign/main", { currentSession: { ...session, liveChatId: resolvedId } }, first.updateTime);
+            console.log("自動補返 liveChatId 成功：", resolvedId, "，等下個 cron cycle 開始正常 poll。");
+        } catch (e) {
+            console.log("補 liveChatId 嗰陣撞期（同一時間仲有第二個寫入者），等下個 cron cycle 再試。");
+        }
         return;
     }
 
