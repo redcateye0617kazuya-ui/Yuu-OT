@@ -285,11 +285,7 @@ function setupCampaignSync() {
             document.getElementById("video_url").value = session.videoUrl || "";
             document.getElementById("statusBox").innerText = `狀態：直播中 (${session.videoTitle || "Live"})`;
             document.getElementById("cutoffBtn").style.display = "inline-block";
-            if (session.liveChatId && data.ytApiKey) {
-                startScPolling(session.liveChatId, data.ytApiKey);
-            } else {
-                stopScPolling();
-            }
+            stopScPolling();
         } else {
             document.getElementById("video_url").value = "";
             let statusText = "狀態：等待新 Link（馬拉松進行中）";
@@ -981,85 +977,9 @@ async function addPayme() {
     amountInput.value = "";
 }
 
-function startScPolling(liveChatId, apiKey) {
-    if (scPollInterval && currentPolledChatId === liveChatId) return;
-    stopScPolling();
-    currentPolledChatId = liveChatId;
-    let nextPageToken = null;
-
-    async function poll() {
-        try {
-            let url = `https://www.googleapis.com/youtube/v3/liveChat/messages?liveChatId=${liveChatId}&part=snippet,authorDetails&key=${apiKey}`;
-            if (nextPageToken) url += `&pageToken=${nextPageToken}`;
-
-            const res = await fetch(url);
-            if (!res.ok) { console.error("SC 輪詢 API 回應錯誤", res.status); return; }
-            const data = await res.json();
-            if (data.nextPageToken) nextPageToken = data.nextPageToken;
-            if (!data.items) return;
-
-            for (const item of data.items) {
-                if (item.snippet.type === "superChatEvent") {
-                    const scDetails = item.snippet.superChatDetails;
-                    if (!scDetails) continue;
-                    const rawAmount = scDetails.amountMicros ? scDetails.amountMicros / 1000000 : 0;
-                    const currencyCode = (scDetails.currency || "HKD").toUpperCase();
-                    const amount = await convertToHKD(rawAmount, currencyCode);
-                    await addContributionAndRecalc({
-                        isSuperChat: true,
-                        id: item.id,
-                        name: item.authorDetails.displayName,
-                        amount,
-                        originalAmount: rawAmount,
-                        originalCurrency: currencyCode,
-                        eventTimeMs: new Date(item.snippet.publishedAt).getTime(),
-                        message: scDetails.userComment || ""
-                    });
-                } else if (item.snippet.type === "membershipGiftingEvent") {
-                    const giftDetails = item.snippet.membershipGiftingDetails;
-                    if (!giftDetails) continue;
-                    await addMembershipGiftEvent({
-                        id: item.id,
-                        name: item.authorDetails.displayName,
-                        count: giftDetails.giftMembershipsCount || 0,
-                        eventTimeMs: new Date(item.snippet.publishedAt).getTime()
-                    });
-                } else if (item.snippet.type === "memberMilestoneChatEvent") {
-                    const milestoneDetails = item.snippet.memberMilestoneChatDetails;
-                    if (!milestoneDetails) continue;
-                    await addMilestoneEvent({
-                        id: item.id,
-                        name: item.authorDetails.displayName,
-                        memberMonth: milestoneDetails.memberMonth || 0,
-                        memberLevelName: milestoneDetails.memberLevelName || "",
-                        message: milestoneDetails.userComment || "",
-                        eventTimeMs: new Date(item.snippet.publishedAt).getTime()
-                    });
-                } else if (item.snippet.type === "newSponsorEvent") {
-                    const newSponsorDetails = item.snippet.newSponsorDetails;
-                    if (!newSponsorDetails) continue;
-                    await addNewSponsorEvent({
-                        id: item.id,
-                        name: item.authorDetails.displayName,
-                        memberLevelName: newSponsorDetails.memberLevelName || "",
-                        isUpgrade: !!newSponsorDetails.isUpgrade,
-                        eventTimeMs: new Date(item.snippet.publishedAt).getTime()
-                    });
-                }
-            }
-        } catch (e) {
-            console.error("輪詢 SC 出錯:", e);
-        }
-    }
-
-    poll();
-    // 由 10 秒拉疏到 45 秒：YouTube Data API 每日 quota 有限，之前個 dashboard 分頁
-    // 同 Cloudflare Worker 一齊密密 poll，試過未夠一日就爆咗 quota（quotaExceeded），
-    // 之後成日都 poll 唔到新訊息。45 秒喺「最多 3 部裝置成日長開」嘅情況下都仲有
-    // 充足緩衝（約 7,200/10,000 單位）。Worker 仍然每分鐘有一份做底，拉疏咗都唔怕漏單。
-    scPollInterval = setInterval(poll, 45000);
-}
-
+// 瀏覽器唔再自己獨立 poll SuperChat：就算幾多部裝置同時開住個 dashboard，
+// 都唔會再加大 YouTube API quota 嘅消耗，淨係靠 Cloudflare Worker（每分鐘一次）
+// 做呢份工作——新課金最多延遲到 1 分鐘先見到，但唔會再因為裝置數量唔定而撞爆 quota。
 function stopScPolling() {
     if (scPollInterval) { clearInterval(scPollInterval); scPollInterval = null; }
     currentPolledChatId = null;
